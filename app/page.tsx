@@ -1,4 +1,4 @@
-// src/app/page.tsx
+// app/page.tsx
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -14,7 +14,7 @@ export default function Home() {
         <header className="mb-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Early access • menscoach.ai
+            <span>Early access • menscoach.ai v2</span>
           </div>
         </header>
 
@@ -45,7 +45,8 @@ export default function Home() {
             </form>
 
             <p className="mt-3 text-xs text-slate-500">
-              No spam. You’ll get updates as we roll out the first version of the AI coach.
+              No spam. You will get updates as we roll out the first version of the AI
+              coach.
             </p>
 
             <div className="mt-8 grid gap-3 text-xs md:text-sm text-slate-300">
@@ -89,8 +90,8 @@ export default function Home() {
                   Ask you better questions.
                 </span>
                 <p className="mt-1 text-slate-300">
-                  Not “how are you?” but “What’s actually weighing on you right now?” and
-                  “What would progress look like today?”
+                  Not just “how are you?” but “What is actually weighing on you right
+                  now?” and “What would progress look like today?”
                 </p>
               </li>
               <li className="border-b border-slate-800 pb-3">
@@ -107,14 +108,14 @@ export default function Home() {
                   Keep you accountable to the man you want to be.
                 </span>
                 <p className="mt-1 text-slate-300">
-                  Track what you say matters to you – and nudge you back towards it when
+                  Track what you say matters to you and nudge you back towards it when
                   life pulls you off course.
                 </p>
               </li>
             </ul>
 
             <p className="mt-5 text-xs text-slate-500">
-              menscoach.ai is not a therapist or a crisis service. It’s a practical,
+              menscoach.ai is not a therapist or a crisis service. It is a practical,
               always-on coach for men who take their growth seriously.
             </p>
           </aside>
