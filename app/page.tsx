@@ -1,4 +1,5 @@
 // app/page.tsx
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -9,8 +10,8 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center">
-      <div className="mx-auto w-full max-w-4xl px-6 py-12">
+    <main className="min-h-screen bg-slate-950 text-slate-50 flex items-start">
+      <div className="mx-auto w-full max-w-4xl px-6 pt-8 pb-12">
         <header className="mb-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -36,13 +37,23 @@ export default function Home() {
                 placeholder="Enter your email for early access"
                 className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70"
               />
-              <button
-                type="button"
-                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 transition"
-              >
-                Join the early access list
-              </button>
-            </form>
+            <button
+              type="button"
+              className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 transition"
+            >
+              Join the early access list
+            </button>
+          </form>
+
+          <div className="mt-4 flex flex-wrap gap-3 text-sm">
+            <span className="text-slate-400">or</span>
+            <Link
+              href="/chat"
+              className="inline-flex items-center rounded-xl border border-emerald-400/70 px-4 py-2 font-medium text-emerald-300 hover:bg-emerald-400/10 transition"
+            >
+              Jump into the chat
+            </Link>
+          </div>
 
             <p className="mt-3 text-xs text-slate-500">
               No spam. You will get updates as we roll out the first version of the AI
