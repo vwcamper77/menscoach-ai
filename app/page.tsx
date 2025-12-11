@@ -1,65 +1,125 @@
-import Image from "next/image";
+// src/app/page.tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "menscoach.ai | An AI coach for men",
+  description:
+    "menscoach.ai is an AI coach for modern men. Build clarity, confidence and emotional strength with one guided conversation a day.",
+};
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center">
+      <div className="mx-auto w-full max-w-4xl px-6 py-12">
+        <header className="mb-10">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Early access • menscoach.ai
+          </div>
+        </header>
+
+        <section className="grid gap-10 md:grid-cols-[3fr,2fr] md:items-center">
+          <div>
+            <h1 className="text-3xl md:text-5xl font-semibold tracking-tight text-slate-50 mb-4">
+              An AI coach for men who want more{" "}
+              <span className="text-emerald-400">clarity, strength and control</span>.
+            </h1>
+            <p className="text-sm md:text-base text-slate-300 mb-6 leading-relaxed">
+              menscoach.ai gives you a private space to think out loud, get perspective,
+              and make better decisions. One grounded conversation a day about what
+              actually matters: your work, relationships, energy and direction.
+            </p>
+
+            <form className="flex flex-col sm:flex-row gap-3 max-w-md">
+              <input
+                type="email"
+                placeholder="Enter your email for early access"
+                className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70"
+              />
+              <button
+                type="button"
+                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 transition"
+              >
+                Join the early access list
+              </button>
+            </form>
+
+            <p className="mt-3 text-xs text-slate-500">
+              No spam. You’ll get updates as we roll out the first version of the AI coach.
+            </p>
+
+            <div className="mt-8 grid gap-3 text-xs md:text-sm text-slate-300">
+              <div className="flex items-start gap-2">
+                <span className="mt-1 h-4 w-4 rounded-full bg-emerald-500/10 flex items-center justify-center text-[10px]">
+                  ✓
+                </span>
+                <p>
+                  Daily check-ins to get your head straight before work, after arguments,
+                  or when you feel stuck.
+                </p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-1 h-4 w-4 rounded-full bg-emerald-500/10 flex items-center justify-center text-[10px]">
+                  ✓
+                </span>
+                <p>
+                  Built specifically for men: boundaries, decisions, stress, focus, and
+                  modern masculinity.
+                </p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-1 h-4 w-4 rounded-full bg-emerald-500/10 flex items-center justify-center text-[10px]">
+                  ✓
+                </span>
+                <p>
+                  Private, judgment-free conversations. An AI coach that remembers you
+                  and helps you make progress over time.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-200 shadow-lg shadow-black/40">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+              What menscoach.ai will do
+            </p>
+            <ul className="space-y-3">
+              <li className="border-b border-slate-800 pb-3">
+                <span className="font-medium text-slate-50">
+                  Ask you better questions.
+                </span>
+                <p className="mt-1 text-slate-300">
+                  Not “how are you?” but “What’s actually weighing on you right now?” and
+                  “What would progress look like today?”
+                </p>
+              </li>
+              <li className="border-b border-slate-800 pb-3">
+                <span className="font-medium text-slate-50">
+                  Help you think, not tell you what to do.
+                </span>
+                <p className="mt-1 text-slate-300">
+                  It reflects your own words back to you so you can see patterns, blind
+                  spots and options more clearly.
+                </p>
+              </li>
+              <li>
+                <span className="font-medium text-slate-50">
+                  Keep you accountable to the man you want to be.
+                </span>
+                <p className="mt-1 text-slate-300">
+                  Track what you say matters to you – and nudge you back towards it when
+                  life pulls you off course.
+                </p>
+              </li>
+            </ul>
+
+            <p className="mt-5 text-xs text-slate-500">
+              menscoach.ai is not a therapist or a crisis service. It’s a practical,
+              always-on coach for men who take their growth seriously.
+            </p>
+          </aside>
+        </section>
+      </div>
+    </main>
   );
 }
