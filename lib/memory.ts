@@ -1,7 +1,5 @@
 // lib/memory.ts
-// Lightweight in-memory "memory" for menscoach.ai.
-// No Postgres, no KV. Just a simple Map in server memory.
-// This will reset on cold start or new lambda, but is fine for MVP.
+import { getFirestore } from "./firebaseAdmin";
 
 type StoredTurn = {
   role: "user" | "assistant";
@@ -15,33 +13,63 @@ export type UserMemory = {
   history: StoredTurn[];
 };
 
-const memoryStore = new Map<string, UserMemory>();
+const COLLECTION = "mc_sessions";
+const MAX_TURNS = 20;
 
-export async function getMemory(
-  sessionId: string
-): Promise<UserMemory | null> {
-  const mem = memoryStore.get(sessionId);
-  return mem ?? null;
+function safeSessionId(sessionId: string) {
+  return sessionId.replaceAll("/", "_");
+}
+
+export async function getMemory(sessionId: string): Promise<UserMemory | null> {
+  const db = getFirestore();
+  const docId = safeSessionId(sessionId);
+
+  const snap = await db.collection(COLLECTION).doc(docId).get();
+  if (!snap.exists) return null;
+
+  const data = snap.data() as Partial<UserMemory> | undefined;
+  if (!data) return null;
+
+  return {
+    name: data.name,
+    goals: data.goals,
+    currentChallenge: data.currentChallenge,
+    history: Array.isArray(data.history) ? (data.history as StoredTurn[]) : [],
+  };
 }
 
 export async function appendToHistory(
   sessionId: string,
   turns: StoredTurn[]
 ): Promise<void> {
-  const existing = memoryStore.get(sessionId) ?? { history: [] };
+  const db = getFirestore();
+  const docId = safeSessionId(sessionId);
+  const ref = db.collection(COLLECTION).doc(docId);
 
-  const newHistory = [...existing.history, ...turns];
+  await db.runTransaction(async (tx: any) => {
+    const snap = await tx.get(ref);
+    const existing =
+      (snap.exists ? (snap.data() as Partial<UserMemory>) : {}) ?? {};
+    const history = Array.isArray(existing.history)
+      ? (existing.history as StoredTurn[])
+      : [];
 
-  // Keep only last N turns to avoid unbounded growth
-  const MAX_TURNS = 20;
-  const trimmed =
-    newHistory.length > MAX_TURNS
-      ? newHistory.slice(newHistory.length - MAX_TURNS)
-      : newHistory;
+    const nextHistory = [...history, ...turns];
+    const trimmed =
+      nextHistory.length > MAX_TURNS
+        ? nextHistory.slice(nextHistory.length - MAX_TURNS)
+        : nextHistory;
 
-  memoryStore.set(sessionId, {
-    ...existing,
-    history: trimmed,
+    tx.set(
+      ref,
+      {
+        ...existing,
+        history: trimmed,
+        updatedAt: Date.now(),
+        createdAt: snap.exists ? (existing as any).createdAt ?? Date.now() : Date.now(),
+      },
+      { merge: true }
+    );
   });
 }
 
@@ -49,10 +77,16 @@ export async function saveMemory(
   sessionId: string,
   data: Partial<Omit<UserMemory, "history">>
 ): Promise<void> {
-  const existing = memoryStore.get(sessionId) ?? { history: [] };
+  const db = getFirestore();
+  const docId = safeSessionId(sessionId);
+  const ref = db.collection(COLLECTION).doc(docId);
 
-  memoryStore.set(sessionId, {
-    ...existing,
-    ...data,
-  });
+  await ref.set(
+    {
+      ...data,
+      updatedAt: Date.now(),
+      createdAt: Date.now(),
+    },
+    { merge: true }
+  );
 }
