@@ -1,63 +1,153 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Basic reset */
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  padding: 0;
+  margin: 0;
+  height: 100%;
 }
 
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+:root {
+  --mc-vv-offset: 0px;
 }
 
-@keyframes slowPulse {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.1); }
+* {
+  box-sizing: border-box;
 }
 
-@keyframes subtleGlow {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.6; }
+/* Root uses dvh so mobile address bar and keyboard behave */
+.mc-chat-root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #070b14;
+  padding-bottom: var(--mc-vv-offset, 0px);
 }
 
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradientShift 12s ease infinite;
+/* Optional header area */
+.mc-chat-header {
+  padding: 12px 12px 8px 12px;
 }
 
-.animate-pulse-slow {
-  animation: slowPulse 6s ease-in-out infinite;
+.mc-header-title {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 16px;
+  font-weight: 600;
 }
 
-.animate-glow {
-  animation: subtleGlow 4s ease-in-out infinite;
-}
-@keyframes fadeInUp {
-  0% { opacity: 0; transform: translateY(12px); }
-  100% { opacity: 1; transform: translateY(0); }
+/* Scroll area for messages only */
+.mc-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  padding-bottom: 110px; /* space for input bar */
+  -webkit-overflow-scrolling: touch;
 }
 
-.animate-fadeInUp {
-  animation: fadeInUp 0.8s ease forwards;
+/* Message rows */
+.mc-bubble-row {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.mc-bubble-row.is-user {
+  justify-content: flex-end;
+}
+
+.mc-bubble-row.is-assistant {
+  justify-content: flex-start;
+}
+
+/* Bubbles */
+.mc-bubble {
+  max-width: 85%;
+  padding: 12px 12px;
+  border-radius: 16px;
+  line-height: 1.35;
+  font-size: 15px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mc-bubble-row.is-user .mc-bubble {
+  background: rgba(0, 255, 170, 0.12);
+  border: 1px solid rgba(0, 255, 170, 0.22);
+}
+
+/* Sticky input bar. Always visible. No horizontal scroll. */
+.mc-chat-inputbar {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 12px;
+
+  background: rgba(7, 11, 20, 0.92);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+  /* iOS safe area */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+/* Input */
+.mc-chat-input {
+  height: 44px;
+  border-radius: 12px;
+  padding: 0 12px;
+  outline: none;
+
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mc-chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Send button is always visible */
+.mc-chat-send {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 170, 0.25);
+  background: rgba(0, 255, 170, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mc-chat-send:disabled {
+  opacity: 0.5;
+}
+
+/* Landing value cards animation */
+.mc-fade-in-up {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: mc-fade-in-up 0.7s ease forwards;
+}
+
+.mc-delay-0 { animation-delay: 0s; }
+.mc-delay-1 { animation-delay: 0.15s; }
+.mc-delay-2 { animation-delay: 0.3s; }
+.mc-delay-3 { animation-delay: 0.45s; }
+.mc-delay-4 { animation-delay: 0.6s; }
+.mc-delay-5 { animation-delay: 0.75s; }
+.mc-delay-6 { animation-delay: 0.9s; }
+.mc-delay-7 { animation-delay: 1.05s; }
+.mc-delay-8 { animation-delay: 1.2s; }
+.mc-delay-9 { animation-delay: 1.35s; }
+
+@keyframes mc-fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

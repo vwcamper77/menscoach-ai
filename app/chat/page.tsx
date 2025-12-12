@@ -213,7 +213,7 @@ export default function ChatPage() {
 
       {/* Mode selector */}
       <div className="border-b border-slate-800 bg-slate-950/95 px-2 sm:px-4 py-2">
-        <div className="mx-auto w-full max-w-4xl flex gap-2 overflow-x-auto no-scrollbar">
+        <div className="mx-auto w-full max-w-4xl flex flex-wrap justify-center sm:justify-start gap-2">
           {MODES.map((m) => (
             <button
               key={m.id}
@@ -229,7 +229,7 @@ export default function ChatPage() {
             </button>
           ))}
         </div>
-        <p className="mx-auto w-full max-w-4xl mt-1 text-[10px] sm:text-[11px] text-slate-500">
+        <p className="mx-auto w-full max-w-4xl mt-1 text-[10px] sm:text-[11px] text-slate-500 text-center sm:text-left">
           {MODES.find((m) => m.id === mode)?.hint}
         </p>
       </div>
@@ -274,30 +274,32 @@ export default function ChatPage() {
           className="sticky bottom-0 left-0 right-0 pt-2 sm:pt-3 bg-slate-950/95 backdrop-blur z-20 border-t border-slate-800"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
         >
-          <div className="flex items-end gap-2 sm:gap-3">
-            <textarea
-              rows={1}
-              className="flex-1 min-w-0 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
-              placeholder="Type what is on your mind…"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
+          <div className="mx-auto w-full max-w-4xl px-2 sm:px-4">
+            <div className="flex items-end gap-2 sm:gap-3">
+              <textarea
+                rows={1}
+                className="flex-1 min-w-0 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-base sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
+                placeholder="Type what is on your mind…"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
 
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={isSending || !input.trim()}
-              className="shrink-0 rounded-2xl bg-emerald-500 px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              {isSending ? "…" : "Send"}
-            </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={isSending || !input.trim()}
+                className="shrink-0 rounded-2xl bg-emerald-500 px-4 py-2 text-base sm:text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {isSending ? "…" : "Send"}
+              </button>
+            </div>
+
+            <p className="mt-1 sm:mt-2 text-[10px] sm:text-[11px] text-slate-500">
+              menscoach.ai helps you reflect and plan small next steps. It
+              cannot diagnose or replace professional support.
+            </p>
           </div>
-
-          <p className="mt-1 sm:mt-2 text-[10px] sm:text-[11px] text-slate-500">
-            menscoach.ai helps you reflect and plan small next steps. It cannot
-            diagnose or replace professional support.
-          </p>
         </div>
       </div>
     </main>

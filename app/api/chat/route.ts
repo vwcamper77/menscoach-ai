@@ -14,14 +14,20 @@ type CoachingMode =
 
 type Archetype = "mentor" | "warrior" | "father";
 
-function getArchetypeForMode(mode?: CoachingMode): Archetype {
-  // Option A mapping:
+function chooseArchetype(mode: CoachingMode | undefined, lastUserText: string): Archetype {
+  // Option A:
   // grounding -> mentor
   // discipline -> warrior
   // relationships -> father
-  // business -> warrior or mentor (gentler possible)
+  // business -> warrior OR mentor (gentler depending on individual)
   // purpose -> mentor
   if (!mode) return "mentor";
+
+  if (mode === "business") {
+    // Gentle if user signals overwhelm, anxiety, burnout, fear, panic
+    const softSignals = /(overwhelm|overwhelmed|anxious|anxiety|burnout|panic|stressed|stress|can't cope|too much)/i;
+    return softSignals.test(lastUserText) ? "mentor" : "warrior";
+  }
 
   switch (mode) {
     case "grounding":
@@ -30,11 +36,6 @@ function getArchetypeForMode(mode?: CoachingMode): Archetype {
       return "warrior";
     case "relationships":
       return "father";
-    case "business": {
-      // Business can be warrior or mentor depending on the individual
-      const roll = Math.random();
-      return roll < 0.5 ? "warrior" : "mentor";
-    }
     case "purpose":
       return "mentor";
     default:
@@ -63,11 +64,11 @@ export async function POST(req: Request) {
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json(
-        { error: "No messages provided" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No messages provided" }, { status: 400 });
     }
+
+    const lastUserMsg =
+      [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
     const memory = sessionId ? await getMemory(sessionId) : null;
 
@@ -90,7 +91,7 @@ Guide him away from reactivity and people pleasing.
       business: `
 Cut through overwhelm.
 Clarify signal versus noise.
-Support strong, clean decisions and ownership while keeping some compassion for his situation.
+Support strong, clean decisions and ownership while keeping compassion for pressure.
 `.trim(),
       purpose: `
 Zoom out to direction and meaning.
@@ -101,18 +102,18 @@ Strip away distractions and false paths.
 
     const archetypeVoices: Record<Archetype, string> = {
       mentor: `
-Speak like a grounded older brother.
-Steady, calm, few words, high impact.
+Steady. Calm. Few words. High impact.
+Bring him back to centre before action.
 `.trim(),
       warrior: `
-Speak directly and cleanly.
-Cut through illusion and avoidance.
-Strong edge but never cruelty.
+Direct and clean.
+Call out avoidance.
+Strong edge, never cruel.
 `.trim(),
       father: `
-Speak warm but firm.
-Protective and honest.
-Truth with compassion and responsibility over comfort.
+Warm but firm.
+Truth with compassion.
+Boundaries and responsibility.
 `.trim(),
     };
 
@@ -121,7 +122,7 @@ Truth with compassion and responsibility over comfort.
         ? modeDescriptions[mode]
         : "General masculine grounding and clarity coaching.";
 
-    const archetype = getArchetypeForMode(mode);
+    const archetype = chooseArchetype(mode, lastUserMsg);
     const archetypeVoice = archetypeVoices[archetype];
 
     const memoryContext =
@@ -130,21 +131,16 @@ Truth with compassion and responsibility over comfort.
             {
               role: "system" as const,
               content:
-                `Lightweight memory about this user (only use if helpful; never invent details):\n` +
+                `Memory (use only if clearly relevant; never invent details):\n` +
                 `Name: ${name ?? memory?.name ?? "unknown"}\n` +
                 `Goals: ${goals ?? memory?.goals ?? "unknown"}\n` +
-                `Current challenge: ${
-                  currentChallenge ?? memory?.currentChallenge ?? "unknown"
-                }\n`,
+                `Current challenge: ${currentChallenge ?? memory?.currentChallenge ?? "unknown"}\n`,
             },
           ]
         : [];
 
     const historyMessages =
-      memory?.history?.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })) ?? [];
+      memory?.history?.map((m) => ({ role: m.role, content: m.content })) ?? [];
 
     const finalMessages = [
       {
@@ -152,46 +148,30 @@ Truth with compassion and responsibility over comfort.
         content: `
 You are menscoach.ai, a grounded masculine coach built on the philosophy of Better Masculine Man.
 
-Your voice:
+Rules:
 - calm, slow, embodied
 - direct, few words, high impact
 - masculine, not therapeutic
-- clear, honest, no fluff
-- short replies: 1 to 3 short paragraphs
-- always finish with one powerful question
+- no fluff, no cheerleading, no corporate talk
+- 1 to 3 short paragraphs
+- end with one strong question
 
-Current coaching mode:
+Mode focus:
 ${modeText}
 
-Current archetype tone:
+Archetype tone:
 ${archetypeVoice}
 
-BMM values you embody:
-- Responsibility: no blame, no excuses.
-- Presence: back to breath, body, posture.
-- Discipline: simple, consistent action.
-- Purpose: direction and mission.
-- Strength with compassion: firm and warm.
-- Brotherhood: challenge with respect.
-- Honour: integrity when no one is watching.
-- Growth over victimhood: setbacks as training.
-- Embodiment: feel, do not overthink.
-- Contribution: become a better man for others.
+BMM values:
+Responsibility, Presence, Discipline, Purpose, Strength with compassion, Brotherhood, Honour, Growth over victimhood, Embodiment, Contribution.
 
 How to respond:
-- Reflect the essence of what he said in simple language.
-- Strip away noise and stories; go to what is true underneath.
-- Invite responsibility, not shame.
-- If he is overwhelmed, bring him back to breath and the next small step.
-- Offer at most one to three practical ideas and keep the focus on awareness and responsibility.
-- Your final line must be a single grounded question that moves him one step deeper or forward.
-
-Tone by mode:
-- Grounding: slower, softer edge; more breath and body cues.
-- Discipline: firmer, cleaner, sharper; call out avoidance directly.
-- Relationships: steady, warm but firm; focus on presence and boundaries.
-- Business: decisive and clear, but able to be gentle when needed; acknowledge pressure and then move to ownership.
-- Purpose: reflective and spacious; fewer words, deeper questions.
+- reflect the essence in simple language
+- strip away noise and stories, go to what is true underneath
+- invite responsibility, not shame
+- if overwhelmed, return him to breath and the next small step
+- offer at most 1 to 3 practical ideas
+- final line is one grounded question
         `.trim(),
       },
       ...memoryContext,
@@ -205,26 +185,19 @@ Tone by mode:
       max_output_tokens: 450,
     });
 
-    const assistantMessage =
-      response.output_text ?? "Sorry, something went wrong.";
+    const assistantMessage = response.output_text ?? "Sorry, something went wrong.";
 
     if (sessionId) {
-      const lastUser = messages[messages.length - 1];
-
       const turns = [
-        ...(lastUser
-          ? [{ role: "user" as const, content: lastUser.content }]
-          : []),
+        ...(lastUserMsg ? [{ role: "user" as const, content: lastUserMsg }] : []),
         { role: "assistant" as const, content: assistantMessage },
       ];
-
       await appendToHistory(sessionId, turns);
 
       await saveMemory(sessionId, {
         name: name ?? memory?.name,
         goals: goals ?? memory?.goals,
-        currentChallenge:
-          currentChallenge ?? memory?.currentChallenge,
+        currentChallenge: currentChallenge ?? memory?.currentChallenge,
       });
     }
 
@@ -232,7 +205,7 @@ Tone by mode:
   } catch (err: any) {
     console.error("Chat error:", err);
     return NextResponse.json(
-      { error: "Chat error", details: err?.message ?? "Unknown error" },
+      { error: "Chat error", details: err?.message ?? String(err) },
       { status: 500 }
     );
   }

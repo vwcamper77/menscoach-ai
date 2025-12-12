@@ -63,7 +63,7 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="p-6 rounded-2xl bg-slate-800/60 border border-slate-700">
               <p className="text-slate-300 text-sm">
-                "This helped me get out of a rut and make decisions I had been avoiding for months. menscoach.ai keeps me honest with myself."
+                &quot;This helped me get out of a rut and make decisions I had been avoiding for months. menscoach.ai keeps me honest with myself.&quot;
               </p>
               <p className="mt-3 text-emerald-400 text-xs font-semibold">
                 Alex, 32  - Product manager
@@ -72,7 +72,7 @@ export default function Home() {
 
             <div className="p-6 rounded-2xl bg-slate-800/60 border border-slate-700">
               <p className="text-slate-300 text-sm">
-                "Feels like a grounded coach that actually understands what men are dealing with today. No fluff, just real reflection and next steps."
+                &quot;Feels like a grounded coach that actually understands what men are dealing with today. No fluff, just real reflection and next steps.&quot;
               </p>
               <p className="mt-3 text-emerald-400 text-xs font-semibold">
                 Daniel, 41  - Business owner
@@ -81,7 +81,7 @@ export default function Home() {
 
             <div className="p-6 rounded-2xl bg-slate-800/60 border border-slate-700">
               <p className="text-slate-300 text-sm">
-                "Not therapy, not hype. It has helped me stay disciplined, set boundaries, and show up better for my family."
+                &quot;Not therapy, not hype. It has helped me stay disciplined, set boundaries, and show up better for my family.&quot;
               </p>
               <p className="mt-3 text-emerald-400 text-xs font-semibold">
                 Sam, 29  - Father of two
@@ -147,8 +147,7 @@ export default function Home() {
             ].map((value, idx) => (
               <div
   key={idx}
-  className="relative animate-fadeInUp"
-  style={{ animationDelay: `${idx * 0.15}s` }}
+  className={`relative mc-fade-in-up mc-delay-${Math.min(idx, 9)}`}
 >
 
                 {/* Timeline dot */}
