@@ -1,33 +1,168 @@
 // app/chat/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { getOrCreateSessionId } from "@/utils/sessionId";
 
 type Message = {
   role: "user" | "assistant";
   content: string;
 };
 
+type CoachingMode =
+  | "grounding"
+  | "discipline"
+  | "relationships"
+  | "business"
+  | "purpose";
+
+const MODES: { id: CoachingMode; label: string; hint: string }[] = [
+  {
+    id: "grounding",
+    label: "Grounding",
+    hint: "Stress, overthinking, feeling off-centre",
+  },
+  {
+    id: "discipline",
+    label: "Discipline",
+    hint: "Habits, consistency, self-sabotage",
+  },
+  {
+    id: "relationships",
+    label: "Relationships",
+    hint: "Partner, dating, family dynamics",
+  },
+  {
+    id: "business",
+    label: "Business",
+    hint: "Work, leadership, decisions",
+  },
+  {
+    id: "purpose",
+    label: "Purpose",
+    hint: "Direction, mission, what’s next",
+  },
+];
+
 export default function ChatPage() {
+  // ---------------------------
+  // VARIATIONS
+  // ---------------------------
+
+  const headerVariants = [
+    "menscoach.ai · Chat",
+    "menscoach.ai · Coaching Chat",
+    "menscoach.ai · Your Space",
+    "menscoach.ai · Private Coaching",
+    "menscoach.ai · The Work",
+  ];
+
+  const disclaimerVariants = [
+    "Not a therapist. If you’re in crisis, contact emergency services.",
+    "Coaching only — not therapy. For emergencies, contact local services.",
+    "Supportive conversation, not clinical care. Crisis → emergency services.",
+    "Not therapy. For crisis situations, contact emergency services.",
+  ];
+
+  const openerByMode: Record<CoachingMode, string[]> = {
+    grounding: [
+      "Let’s slow things down. What feels heaviest or most confusing for you right now?",
+      "Before we solve anything, tell me what’s really been sitting on your chest lately.",
+    ],
+    discipline: [
+      "Where in your life do you most need more consistency or discipline right now?",
+      "What’s one habit, pattern, or behaviour you know is holding you back?",
+    ],
+    relationships: [
+      "What’s going on in your relationships — partner, dating, family — that you want to handle better?",
+      "If you were completely honest, how satisfied are you with how you’re showing up in your relationships?",
+    ],
+    business: [
+      "Briefly describe your work or business and the main pressure or decision you’re facing.",
+      "What’s the toughest call you’re sitting on in your work or business right now?",
+    ],
+    purpose: [
+      "If you zoomed out on your life, what question about direction or purpose keeps coming back?",
+      "Where in your life do you feel most “off track” or unsure about your path?",
+    ],
+  };
+
+  // ---------------------------
+  // STATE (SSR-safe)
+  // ---------------------------
+
+  const [mode, setMode] = useState<CoachingMode>("grounding");
+
+  const [headerText, setHeaderText] = useState<string>(headerVariants[0]);
+  const [disclaimerText, setDisclaimerText] = useState<string>(
+    disclaimerVariants[0]
+  );
+
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content:
-        "I’m menscoach.ai. What’s on your mind today? You can start with whatever feels heaviest.",
+      content: openerByMode["grounding"][0],
     },
   ]);
+
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // ---------------------------
+  // Randomise header/disclaimer/opener AFTER hydration
+  // ---------------------------
+
+  useEffect(() => {
+    const randomHeader =
+      headerVariants[Math.floor(Math.random() * headerVariants.length)];
+    const randomDisclaimer =
+      disclaimerVariants[
+        Math.floor(Math.random() * disclaimerVariants.length)
+      ];
+
+    const groundingOpeners = openerByMode["grounding"];
+    const randomOpener =
+      groundingOpeners[
+        Math.floor(Math.random() * groundingOpeners.length)
+      ];
+
+    setHeaderText(randomHeader);
+    setDisclaimerText(randomDisclaimer);
+
+    setMessages((prev) => {
+      if (!prev.length) {
+        return [{ role: "assistant", content: randomOpener }];
+      }
+      const [first, ...rest] = prev;
+      if (first.role !== "assistant") return prev;
+      return [{ ...first, content: randomOpener }, ...rest];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------------------------
+  // Auto-scroll
+  // ---------------------------
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages]);
+
+  // ---------------------------
+  // SEND
+  // ---------------------------
 
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
 
+    const sessionId = getOrCreateSessionId();
     const newUserMessage: Message = { role: "user", content: trimmed };
-    const historyToSend = messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
 
     setMessages((prev) => [...prev, newUserMessage]);
     setInput("");
@@ -36,16 +171,17 @@ export default function ChatPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: trimmed,
-          history: historyToSend,
+          sessionId,
+          mode,
+          messages: [{ role: "user", content: trimmed }],
         }),
       });
 
       if (!res.ok) {
+        const text = await res.text();
+        console.error("Backend error:", res.status, text);
         throw new Error("Request failed");
       }
 
@@ -78,21 +214,54 @@ export default function ChatPage() {
     }
   };
 
+  // ---------------------------
+  // UI
+  // ---------------------------
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
-      <header className="border-b border-slate-800 bg-slate-950/90 backdrop-blur px-4 py-3">
-        <div className="mx-auto flex w-full max-w-4xl items-center justify-between">
-          <h1 className="text-sm font-semibold text-slate-100">
-            menscoach.ai · <span className="text-emerald-400">Chat</span>
+      {/* Sticky header */}
+      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur px-3 py-2 sm:px-4 sm:py-3">
+        <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-2">
+          <h1 className="text-xs sm:text-sm font-semibold text-slate-100 truncate">
+            {headerText}
           </h1>
-          <p className="text-[11px] text-slate-400">
-            Not a therapist. If you’re in crisis, contact emergency services.
+          <p className="text-[10px] sm:text-[11px] text-slate-400 text-right">
+            {disclaimerText}
           </p>
         </div>
       </header>
 
-      <div className="flex-1 mx-auto w-full max-w-4xl px-4 py-4 flex flex-col gap-4">
-        <div className="flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+      {/* Mode selector */}
+      <div className="border-b border-slate-800 bg-slate-950/95 px-2 sm:px-4 py-2">
+        <div className="mx-auto w-full max-w-4xl flex gap-2 overflow-x-auto no-scrollbar">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMode(m.id)}
+              className={`px-3 py-1 rounded-full text-[11px] sm:text-xs border whitespace-nowrap transition ${
+                mode === m.id
+                  ? "bg-emerald-500 text-slate-950 border-emerald-400"
+                  : "bg-slate-900 text-slate-300 border-slate-700 hover:border-emerald-400/70"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p className="mx-auto w-full max-w-4xl mt-1 text-[10px] sm:text-[11px] text-slate-500">
+          {MODES.find((m) => m.id === mode)?.hint}
+        </p>
+      </div>
+
+      {/* Chat container */}
+      <div className="flex-1 w-full max-w-4xl mx-auto flex flex-col px-2 sm:px-4 pb-2 sm:pb-4 pt-2 sm:pt-3">
+        {/* Messages */}
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 space-y-3"
+        >
           {messages.map((m, index) => (
             <div
               key={index}
@@ -101,7 +270,7 @@ export default function ChatPage() {
               }`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                className={`max-w-[85%] sm:max-w-[80%] rounded-2xl px-3 py-2 text-[13px] sm:text-sm leading-relaxed ${
                   m.role === "user"
                     ? "bg-emerald-500 text-slate-950"
                     : "bg-slate-800 text-slate-50"
@@ -111,30 +280,41 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
+
+          {isSending && (
+            <div className="flex justify-start">
+              <div className="bg-slate-800 text-slate-400 rounded-2xl px-3 py-2 text-[13px] sm:text-sm animate-pulse">
+                menscoach.ai is thinking…
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="border-t border-slate-800 pt-3">
-          <div className="flex items-end gap-3">
+        {/* Input */}
+        <div className="pt-2 sm:pt-3">
+          <div className="flex items-end gap-2 sm:gap-3">
             <textarea
-              rows={2}
-              className="flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
-              placeholder="Type what’s on your mind and press Enter to send. Shift+Enter for a new line."
+              rows={1}
+              className="flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
+              placeholder="Type what’s on your mind…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
             />
+
             <button
               type="button"
               onClick={handleSend}
               disabled={isSending || !input.trim()}
-              className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="shrink-0 rounded-2xl bg-emerald-500 px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              {isSending ? "Thinking…" : "Send"}
+              {isSending ? "…" : "Send"}
             </button>
           </div>
-          <p className="mt-2 text-[11px] text-slate-500">
-            menscoach.ai can help you reflect and plan small next steps. It can’t diagnose
-            or replace professional support.
+
+          <p className="mt-1 sm:mt-2 text-[10px] sm:text-[11px] text-slate-500">
+            menscoach.ai helps you reflect and plan small next steps. It can’t
+            diagnose or replace professional support.
           </p>
         </div>
       </div>
