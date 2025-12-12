@@ -5,7 +5,6 @@ import { getMemory, appendToHistory, saveMemory } from "@/lib/memory";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Modes
 type CoachingMode =
   | "grounding"
   | "discipline"
@@ -13,8 +12,35 @@ type CoachingMode =
   | "business"
   | "purpose";
 
-// Archetypes
 type Archetype = "mentor" | "warrior" | "father";
+
+function getArchetypeForMode(mode?: CoachingMode): Archetype {
+  // Option A mapping:
+  // grounding -> mentor
+  // discipline -> warrior
+  // relationships -> father
+  // business -> warrior or mentor (gentler possible)
+  // purpose -> mentor
+  if (!mode) return "mentor";
+
+  switch (mode) {
+    case "grounding":
+      return "mentor";
+    case "discipline":
+      return "warrior";
+    case "relationships":
+      return "father";
+    case "business": {
+      // Business can be warrior or mentor depending on the individual
+      const roll = Math.random();
+      return roll < 0.5 ? "warrior" : "mentor";
+    }
+    case "purpose":
+      return "mentor";
+    default:
+      return "mentor";
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -27,7 +53,6 @@ export async function POST(req: Request) {
       goals,
       currentChallenge,
       mode,
-      archetype,
     }: {
       messages: { role: "user" | "assistant" | "system"; content: string }[];
       sessionId?: string;
@@ -35,7 +60,6 @@ export async function POST(req: Request) {
       goals?: string;
       currentChallenge?: string;
       mode?: CoachingMode;
-      archetype?: Archetype;
     } = body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -45,75 +69,68 @@ export async function POST(req: Request) {
       );
     }
 
-    // ---- LOAD MEMORY ----
     const memory = sessionId ? await getMemory(sessionId) : null;
 
-    // ---- BMM MODE BEHAVIOUR ----
     const modeDescriptions: Record<CoachingMode, string> = {
       grounding: `
 Bring him out of his head and back into his body.
-Slow him down.
-Strip away noise.
-Reconnect him to breath, posture, presence.
-`,
+Slow him down and strip away noise.
+Reconnect him to breath, posture, and presence.
+`.trim(),
       discipline: `
 Cut through excuses and hesitation.
-Call him forward to small, consistent actions.
-Support him in choosing the hard thing he has been avoiding.
-Hold him to his own standards.
-`,
+Call him forward into small, consistent action.
+Hold him to the standards he says he wants to live by.
+`.trim(),
       relationships: `
-Help him show up grounded and masculine.
-Truth, presence, boundaries.
-Guide him toward leading with clarity—not reactivity.
-`,
+Help him show up as a grounded masculine presence.
+Truth, boundaries, listening, and clarity.
+Guide him away from reactivity and people pleasing.
+`.trim(),
       business: `
-Cut through overwhelm quickly.
-Clarify signal vs noise.
-Encourage decisive leadership, responsibility, ownership.
-`,
+Cut through overwhelm.
+Clarify signal versus noise.
+Support strong, clean decisions and ownership while keeping some compassion for his situation.
+`.trim(),
       purpose: `
-Zoom out. Connect him to direction, mission, meaning.
-Strip away distraction.
-Help him see who he is becoming and what actually matters.
-`,
+Zoom out to direction and meaning.
+Help him see who he is becoming and what truly matters.
+Strip away distractions and false paths.
+`.trim(),
     };
 
     const archetypeVoices: Record<Archetype, string> = {
       mentor: `
 Speak like a grounded older brother.
-Steady. Calm. Few words. High impact.
-`,
+Steady, calm, few words, high impact.
+`.trim(),
       warrior: `
-Speak directly, sharply.
-Cut through illusion. No fluff.
-Challenge with strength and clarity—but never cruelty.
-`,
+Speak directly and cleanly.
+Cut through illusion and avoidance.
+Strong edge but never cruelty.
+`.trim(),
       father: `
 Speak warm but firm.
-Protective, steady.
-Truth with compassion. Responsibility over comfort.
-`,
+Protective and honest.
+Truth with compassion and responsibility over comfort.
+`.trim(),
     };
-
-    const coachingVoice =
-      archetype && archetypeVoices[archetype]
-        ? archetypeVoices[archetype]
-        : archetypeVoices["mentor"];
 
     const modeText =
       mode && modeDescriptions[mode]
         ? modeDescriptions[mode]
-        : "General masculine grounding and clarity.";
+        : "General masculine grounding and clarity coaching.";
 
-    // ---- MEMORY CONTEXT ----
+    const archetype = getArchetypeForMode(mode);
+    const archetypeVoice = archetypeVoices[archetype];
+
     const memoryContext =
       memory || name || goals || currentChallenge
         ? [
             {
-              role: "system",
+              role: "system" as const,
               content:
-                `Memory (only use if truly relevant):\n` +
+                `Lightweight memory about this user (only use if helpful; never invent details):\n` +
                 `Name: ${name ?? memory?.name ?? "unknown"}\n` +
                 `Goals: ${goals ?? memory?.goals ?? "unknown"}\n` +
                 `Current challenge: ${
@@ -129,92 +146,76 @@ Truth with compassion. Responsibility over comfort.
         content: m.content,
       })) ?? [];
 
-    // ---- BMM SYSTEM PROMPT ----
     const finalMessages = [
       {
-        role: "system",
+        role: "system" as const,
         content: `
-You are menscoach.ai — a grounded, masculine AI coach built on the philosophy of Better Masculine Man (BMM).
+You are menscoach.ai, a grounded masculine coach built on the philosophy of Better Masculine Man.
 
 Your voice:
 - calm, slow, embodied
 - direct, few words, high impact
-- masculine polarity and presence
-- no fluff, no therapy tone, no cheerleading
-- no long lists unless explicitly asked
-- 1–3 short paragraphs max
-- always finish with ONE powerful question
+- masculine, not therapeutic
+- clear, honest, no fluff
+- short replies: 1 to 3 short paragraphs
+- always finish with one powerful question
 
-Current BMM coaching mode:
-${modeText.trim()}
+Current coaching mode:
+${modeText}
 
-Current archetype voice:
-${coachingVoice.trim()}
+Current archetype tone:
+${archetypeVoice}
 
-How to adapt tone:
+BMM values you embody:
+- Responsibility: no blame, no excuses.
+- Presence: back to breath, body, posture.
+- Discipline: simple, consistent action.
+- Purpose: direction and mission.
+- Strength with compassion: firm and warm.
+- Brotherhood: challenge with respect.
+- Honour: integrity when no one is watching.
+- Growth over victimhood: setbacks as training.
+- Embodiment: feel, do not overthink.
+- Contribution: become a better man for others.
 
-GROUNDING MODE:
-- speak slowly
-- minimal words
-- bring him back to breath, body, posture
-- emphasise presence over solving
+How to respond:
+- Reflect the essence of what he said in simple language.
+- Strip away noise and stories; go to what is true underneath.
+- Invite responsibility, not shame.
+- If he is overwhelmed, bring him back to breath and the next small step.
+- Offer at most one to three practical ideas and keep the focus on awareness and responsibility.
+- Your final line must be a single grounded question that moves him one step deeper or forward.
 
-DISCIPLINE MODE:
-- firm, clean, sharp
-- challenge avoidance directly
-- focus on one small consistent action
-- call him forward without shaming
-
-RELATIONSHIPS MODE:
-- grounded, warm but firm
-- emphasise presence, boundaries, integrity
-- guide him to lead with clarity, not emotion
-
-BUSINESS MODE:
-- strategic, decisive, mission-first
-- cut through confusion fast
-- reinforce responsibility and leadership
-
-PURPOSE MODE:
-- deep, spacious, reflective
-- connect him to mission, direction, meaning
-- help him see what truly matters
-
-General BMM coaching principles:
-- Reflect the essence of what he said.
-- Strip away noise. Simplify to truth.
-- Encourage responsibility, not blame.
-- Invite him back into his centre.
-- Guide him toward the next honest action.
-
-Your final line MUST be a single, grounded, masculine question.
-`,
+Tone by mode:
+- Grounding: slower, softer edge; more breath and body cues.
+- Discipline: firmer, cleaner, sharper; call out avoidance directly.
+- Relationships: steady, warm but firm; focus on presence and boundaries.
+- Business: decisive and clear, but able to be gentle when needed; acknowledge pressure and then move to ownership.
+- Purpose: reflective and spacious; fewer words, deeper questions.
+        `.trim(),
       },
-
       ...memoryContext,
       ...historyMessages,
       ...messages,
     ];
 
-    // ---- MODEL CALL ----
     const response = await client.responses.create({
-      model: "gpt-4.1", // NOW ACTIVE
+      model: "gpt-4.1",
       input: finalMessages,
       max_output_tokens: 450,
     });
 
     const assistantMessage =
-      response.output_text ?? "Something went wrong.";
+      response.output_text ?? "Sorry, something went wrong.";
 
-    // ---- SAVE MEMORY ----
     if (sessionId) {
       const lastUser = messages[messages.length - 1];
 
       const turns = [
         ...(lastUser
-          ? [{ role: "user", content: lastUser.content }]
+          ? [{ role: "user" as const, content: lastUser.content }]
           : []),
-        { role: "assistant", content: assistantMessage },
+        { role: "assistant" as const, content: assistantMessage },
       ];
 
       await appendToHistory(sessionId, turns);
@@ -231,7 +232,7 @@ Your final line MUST be a single, grounded, masculine question.
   } catch (err: any) {
     console.error("Chat error:", err);
     return NextResponse.json(
-      { error: "Chat error", details: err.message },
+      { error: "Chat error", details: err?.message ?? "Unknown error" },
       { status: 500 }
     );
   }

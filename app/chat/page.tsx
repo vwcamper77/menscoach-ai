@@ -20,12 +20,12 @@ const MODES: { id: CoachingMode; label: string; hint: string }[] = [
   {
     id: "grounding",
     label: "Grounding",
-    hint: "Stress, overthinking, feeling off-centre",
+    hint: "Stress, overthinking, feeling off centre",
   },
   {
     id: "discipline",
     label: "Discipline",
-    hint: "Habits, consistency, self-sabotage",
+    hint: "Habits, consistency, self sabotage",
   },
   {
     id: "relationships",
@@ -40,15 +40,12 @@ const MODES: { id: CoachingMode; label: string; hint: string }[] = [
   {
     id: "purpose",
     label: "Purpose",
-    hint: "Direction, mission, what’s next",
+    hint: "Direction, mission, what is next",
   },
 ];
 
 export default function ChatPage() {
-  // ---------------------------
-  // VARIATIONS
-  // ---------------------------
-
+  // Variations
   const headerVariants = [
     "menscoach.ai · Chat",
     "menscoach.ai · Coaching Chat",
@@ -58,62 +55,53 @@ export default function ChatPage() {
   ];
 
   const disclaimerVariants = [
-    "Not a therapist. If you’re in crisis, contact emergency services.",
-    "Coaching only — not therapy. For emergencies, contact local services.",
-    "Supportive conversation, not clinical care. Crisis → emergency services.",
+    "Not a therapist. If you are in crisis, contact emergency services.",
+    "Coaching only, not therapy. For emergencies, contact local services.",
+    "Supportive conversation, not clinical care. In crisis, contact emergency services.",
     "Not therapy. For crisis situations, contact emergency services.",
   ];
 
   const openerByMode: Record<CoachingMode, string[]> = {
     grounding: [
-      "Let’s slow things down. What feels heaviest or most confusing for you right now?",
-      "Before we solve anything, tell me what’s really been sitting on your chest lately.",
+      "Slow down for a moment. What feels heaviest for you right now?",
+      "Before we try to fix anything, what has really been sitting on your chest lately?",
     ],
     discipline: [
-      "Where in your life do you most need more consistency or discipline right now?",
-      "What’s one habit, pattern, or behaviour you know is holding you back?",
+      "Where are you slipping on the standards you expect of yourself?",
+      "What is one habit or pattern you know is holding you back at the moment?",
     ],
     relationships: [
-      "What’s going on in your relationships — partner, dating, family — that you want to handle better?",
-      "If you were completely honest, how satisfied are you with how you’re showing up in your relationships?",
+      "Where in your relationships do you feel off centre or reactive?",
+      "How satisfied are you with how you are showing up in your closest relationships?",
     ],
     business: [
-      "Briefly describe your work or business and the main pressure or decision you’re facing.",
-      "What’s the toughest call you’re sitting on in your work or business right now?",
+      "Briefly describe your work and the main pressure or decision you are facing.",
+      "What is the toughest call you are sitting on in your work or business right now?",
     ],
     purpose: [
-      "If you zoomed out on your life, what question about direction or purpose keeps coming back?",
-      "Where in your life do you feel most “off track” or unsure about your path?",
+      "If you zoomed out on your life, what question about direction keeps coming back?",
+      "Where in your life do you feel most off track or unsure about your path?",
     ],
   };
 
-  // ---------------------------
-  // STATE (SSR-safe)
-  // ---------------------------
-
+  // State
   const [mode, setMode] = useState<CoachingMode>("grounding");
-
   const [headerText, setHeaderText] = useState<string>(headerVariants[0]);
   const [disclaimerText, setDisclaimerText] = useState<string>(
     disclaimerVariants[0]
   );
-
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
       content: openerByMode["grounding"][0],
     },
   ]);
-
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // ---------------------------
-  // Randomise header/disclaimer/opener AFTER hydration
-  // ---------------------------
-
+  // Randomise header/disclaimer/opener after hydration
   useEffect(() => {
     const randomHeader =
       headerVariants[Math.floor(Math.random() * headerVariants.length)];
@@ -142,10 +130,7 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---------------------------
-  // Auto-scroll
-  // ---------------------------
-
+  // Auto scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
@@ -153,10 +138,7 @@ export default function ChatPage() {
     });
   }, [messages]);
 
-  // ---------------------------
-  // SEND
-  // ---------------------------
-
+  // Send
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
@@ -214,10 +196,7 @@ export default function ChatPage() {
     }
   };
 
-  // ---------------------------
   // UI
-  // ---------------------------
-
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
       {/* Sticky header */}
@@ -296,7 +275,7 @@ export default function ChatPage() {
             <textarea
               rows={1}
               className="flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
-              placeholder="Type what’s on your mind…"
+              placeholder="Type what is on your mind…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -313,7 +292,7 @@ export default function ChatPage() {
           </div>
 
           <p className="mt-1 sm:mt-2 text-[10px] sm:text-[11px] text-slate-500">
-            menscoach.ai helps you reflect and plan small next steps. It can’t
+            menscoach.ai helps you reflect and plan small next steps. It cannot
             diagnose or replace professional support.
           </p>
         </div>
