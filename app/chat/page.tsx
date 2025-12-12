@@ -270,11 +270,14 @@ export default function ChatPage() {
         </div>
 
         {/* Input */}
-        <div className="pt-2 sm:pt-3">
+        <div
+          className="sticky bottom-0 left-0 right-0 pt-2 sm:pt-3 bg-slate-950/95 backdrop-blur z-20 border-t border-slate-800"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
+        >
           <div className="flex items-end gap-2 sm:gap-3">
             <textarea
               rows={1}
-              className="flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
+              className="flex-1 min-w-0 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
               placeholder="Type what is on your mind…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
