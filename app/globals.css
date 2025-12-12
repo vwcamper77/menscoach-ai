@@ -151,3 +151,13 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Utility to hide scrollbars on scrollable rows */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

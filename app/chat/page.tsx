@@ -100,6 +100,8 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputContainerRef = useRef<HTMLDivElement | null>(null);
+  const [bottomPadding, setBottomPadding] = useState<number>(24);
 
   // Randomise header/disclaimer/opener after hydration
   useEffect(() => {
@@ -132,11 +134,55 @@ export default function ChatPage() {
 
   // Auto scroll
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({
+      top: el.scrollHeight,
       behavior: "smooth",
     });
   }, [messages]);
+
+  // Keep the last message visible above the input (handles keyboard/show-hide)
+  useEffect(() => {
+    const inputEl = inputContainerRef.current;
+    if (!inputEl) return;
+
+    const updateBottomPadding = () => {
+      const inputHeight = inputEl.getBoundingClientRect().height;
+      const nextPadding = Math.min(Math.max(20, inputHeight + 6), 120);
+      setBottomPadding((prev) =>
+        Math.abs(prev - nextPadding) > 1 ? nextPadding : prev
+      );
+
+      const el = scrollRef.current;
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      }
+    };
+
+    const resizeObserver = new ResizeObserver(updateBottomPadding);
+    resizeObserver.observe(inputEl);
+
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", updateBottomPadding);
+      vv.addEventListener("scroll", updateBottomPadding);
+    } else {
+      window.addEventListener("resize", updateBottomPadding);
+    }
+
+    updateBottomPadding();
+
+    return () => {
+      resizeObserver.disconnect();
+      if (vv) {
+        vv.removeEventListener("resize", updateBottomPadding);
+        vv.removeEventListener("scroll", updateBottomPadding);
+      } else {
+        window.removeEventListener("resize", updateBottomPadding);
+      }
+    };
+  }, []);
 
   // Send
   const handleSend = async () => {
@@ -201,11 +247,11 @@ export default function ChatPage() {
     <main className="h-dvh bg-slate-950 text-slate-50 flex flex-col">
       {/* Sticky header */}
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur px-3 py-2 sm:px-4 sm:py-3">
-        <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-2">
-          <h1 className="text-xs sm:text-sm font-semibold text-slate-100 truncate">
+        <div className="mx-auto flex w-full max-w-4xl flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
+          <h1 className="text-[11px] sm:text-sm font-semibold text-slate-100 leading-snug">
             {headerText}
           </h1>
-          <p className="text-[10px] sm:text-[11px] text-slate-400 text-right">
+          <p className="text-[10px] sm:text-[11px] text-slate-400 text-left sm:text-right leading-snug">
             {disclaimerText}
           </p>
         </div>
@@ -213,13 +259,13 @@ export default function ChatPage() {
 
       {/* Mode selector */}
       <div className="border-b border-slate-800 bg-slate-950/95 px-2 sm:px-4 py-2">
-        <div className="mx-auto w-full max-w-4xl flex flex-wrap justify-center sm:justify-start gap-2">
+        <div className="mx-auto w-full max-w-4xl flex flex-nowrap overflow-x-auto hide-scrollbar justify-start gap-1.5 sm:gap-2">
           {MODES.map((m) => (
             <button
               key={m.id}
               type="button"
               onClick={() => setMode(m.id)}
-              className={`px-3 py-1 rounded-full text-[11px] sm:text-xs border whitespace-nowrap transition ${
+              className={`px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] border whitespace-nowrap transition ${
                 mode === m.id
                   ? "bg-emerald-500 text-slate-950 border-emerald-400"
                   : "bg-slate-900 text-slate-300 border-slate-700 hover:border-emerald-400/70"
@@ -235,11 +281,12 @@ export default function ChatPage() {
       </div>
 
       {/* Chat container */}
-      <div className="flex-1 w-full max-w-4xl mx-auto flex flex-col px-2 sm:px-4 pb-2 sm:pb-4 pt-2 sm:pt-3">
+      <div className="flex-1 w-full max-w-4xl mx-auto flex flex-col px-2 sm:px-4 pb-2 sm:pb-4 pt-2 sm:pt-3 min-h-0">
         {/* Messages */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 space-y-3 pb-40"
+          className="flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 space-y-3 min-h-0"
+          style={{ paddingBottom: bottomPadding }}
         >
           {messages.map((m, index) => (
             <div
@@ -271,6 +318,7 @@ export default function ChatPage() {
 
         {/* Input */}
         <div
+          ref={inputContainerRef}
           className="sticky bottom-0 left-0 right-0 pt-2 sm:pt-3 bg-slate-950/95 backdrop-blur z-20 border-t border-slate-800"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
         >
