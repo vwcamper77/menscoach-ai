@@ -198,7 +198,7 @@ export default function ChatPage() {
 
   // UI
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
+    <main className="h-dvh bg-slate-950 text-slate-50 flex flex-col">
       {/* Sticky header */}
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur px-3 py-2 sm:px-4 sm:py-3">
         <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-2">
@@ -239,7 +239,7 @@ export default function ChatPage() {
         {/* Messages */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 space-y-3"
+          className="flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 space-y-3 pb-40"
         >
           {messages.map((m, index) => (
             <div
