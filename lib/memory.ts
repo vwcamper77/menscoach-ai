@@ -20,6 +20,14 @@ function safeSessionId(sessionId: string) {
   return sessionId.replaceAll("/", "_");
 }
 
+function stripUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out as Partial<T>;
+}
+
 export async function getMemory(sessionId: string): Promise<UserMemory | null> {
   const db = getFirestore();
   const docId = safeSessionId(sessionId);
@@ -48,8 +56,8 @@ export async function appendToHistory(
 
   await db.runTransaction(async (tx: any) => {
     const snap = await tx.get(ref);
-    const existing =
-      (snap.exists ? (snap.data() as Partial<UserMemory>) : {}) ?? {};
+    const existing = (snap.exists ? (snap.data() as any) : {}) ?? {};
+
     const history = Array.isArray(existing.history)
       ? (existing.history as StoredTurn[])
       : [];
@@ -60,16 +68,15 @@ export async function appendToHistory(
         ? nextHistory.slice(nextHistory.length - MAX_TURNS)
         : nextHistory;
 
-    tx.set(
-      ref,
-      {
-        ...existing,
-        history: trimmed,
-        updatedAt: Date.now(),
-        createdAt: snap.exists ? (existing as any).createdAt ?? Date.now() : Date.now(),
-      },
-      { merge: true }
-    );
+    // Build update doc without undefined
+    const updateDoc = stripUndefined({
+      ...existing,
+      history: trimmed,
+      updatedAt: Date.now(),
+      createdAt: snap.exists ? existing.createdAt ?? Date.now() : Date.now(),
+    });
+
+    tx.set(ref, updateDoc, { merge: true });
   });
 }
 
@@ -81,12 +88,20 @@ export async function saveMemory(
   const docId = safeSessionId(sessionId);
   const ref = db.collection(COLLECTION).doc(docId);
 
+  const cleaned = stripUndefined(data as Record<string, any>);
+
+  // ✅ If nothing real to save, don’t write
+  if (Object.keys(cleaned).length === 0) return;
+
+  const snap = await ref.get();
+  const existing = snap.exists ? (snap.data() as any) : {};
+
   await ref.set(
-    {
-      ...data,
+    stripUndefined({
+      ...cleaned,
       updatedAt: Date.now(),
-      createdAt: Date.now(),
-    },
+      createdAt: snap.exists ? existing.createdAt ?? Date.now() : Date.now(),
+    }),
     { merge: true }
   );
 }
