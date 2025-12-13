@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../../auth";
+import { authOptions } from "@/auth";
 import { getFirestore } from "@/lib/firebaseAdmin";
 
 const COOKIE_NAME = "mc_session_id";
