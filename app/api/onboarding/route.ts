@@ -1,5 +1,7 @@
 // app/api/onboarding/route.ts
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../../../auth";
 import { getFirestore } from "@/lib/firebaseAdmin";
 
 const SESSION_COOKIE_NAME = "mc_session_id";
@@ -25,7 +27,15 @@ function resolveSessionId(req: Request): string | null {
 }
 
 export async function POST(req: Request) {
-  const sessionId = resolveSessionId(req);
+  // Prefer authenticated user id so onboarding marks the same doc /api/me reads.
+  const session = await getServerSession(authOptions as any).catch(() => null);
+  const authUserId =
+    (session as any)?.user?.id ??
+    (session as any)?.userId ??
+    null;
+
+  const sessionId = authUserId ?? resolveSessionId(req);
+
   if (!sessionId) {
     return NextResponse.json(
       { error: { code: "SESSION_REQUIRED", message: "Session is required." } },
@@ -44,6 +54,7 @@ export async function POST(req: Request) {
       preferredMode: typeof body?.preferredMode === "string" ? body.preferredMode : "direct",
       goal30: typeof body?.goal30 === "string" ? body.goal30 : "",
       onboardingComplete: true,
+      onboardingSkipped: Boolean(body?.onboardingSkipped),
       updatedAt: new Date(),
       createdAt: new Date(),
     },

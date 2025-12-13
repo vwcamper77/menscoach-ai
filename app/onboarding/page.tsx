@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getOrCreateSessionId } from "@/utils/sessionId";
+import { useVisualViewportOffset } from "@/utils/useVisualViewportOffset";
 
 type Mode = "default" | "direct" | "calm" | "presence";
 
@@ -24,6 +25,7 @@ const modeOptions: { key: Mode; label: string; desc: string }[] = [
 export default function OnboardingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  useVisualViewportOffset();
 
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -99,7 +101,12 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <main
+      className="min-h-screen bg-slate-950 text-white"
+      style={{
+        paddingBottom: "calc(env(safe-area-inset-bottom) + var(--mc-vv-offset, 0px) + 24px)",
+      }}
+    >
       <div className="max-w-2xl mx-auto px-6 py-12">
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold text-slate-200">menscoach.ai</div>
@@ -117,6 +124,7 @@ export default function OnboardingPage() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     onboardingComplete: true,
+                    onboardingSkipped: true,
                     // optionally keep whatever they already typed
                     name,
                     primaryFocus,
@@ -162,7 +170,7 @@ export default function OnboardingPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
-                className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-base outline-none focus:border-emerald-500"
               />
             </div>
           )}
@@ -225,7 +233,7 @@ export default function OnboardingPage() {
                 onChange={(e) => setGoal30(e.target.value)}
                 rows={4}
                 placeholder="Example: Train 3 times a week and stop doom scrolling at night."
-                className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-sm outline-none focus:border-emerald-500"
+                className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-base outline-none focus:border-emerald-500"
               />
             </div>
           )}

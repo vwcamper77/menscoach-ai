@@ -49,10 +49,26 @@ function makeId(prefix: string) {
   return `${prefix}-${rand}`;
 }
 
+function formatNameForOpener(
+  name: string | null,
+  onboarded: boolean,
+  skipped: boolean
+) {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  // If onboarding was completed (and not skipped), use lowercase.
+  // If onboarding was skipped or unknown, keep original casing.
+  if (onboarded && !skipped) return trimmed.toLowerCase();
+  return trimmed;
+}
+
 export default function ChatPage() {
   const router = useRouter();
 
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [onboardingSkipped, setOnboardingSkipped] = useState(false);
 
   const [profileName, setProfileName] = useState<string | null>(null);
   const [singleThreadHydrated, setSingleThreadHydrated] = useState(false);
@@ -98,6 +114,8 @@ export default function ChatPage() {
           return;
         }
 
+        setOnboardingComplete(Boolean(data?.profile?.onboardingComplete));
+        setOnboardingSkipped(Boolean(data?.profile?.onboardingSkipped));
         if (data?.profile?.name) setProfileName(data.profile.name as string);
 
         // hydrate plan + entitlements early
@@ -156,12 +174,17 @@ export default function ChatPage() {
     if (messages.length > 0) return;
     if (!singleThreadHydrated) return;
 
+    const nameForOpener = formatNameForOpener(
+      profileName,
+      onboardingComplete,
+      onboardingSkipped
+    );
     const defaultMode: Mode = "grounding";
     const openers = openerByMode[defaultMode];
     const opener = openers[Math.floor(Math.random() * openers.length)];
     const prefixed =
-      profileName && profileName.trim().length > 0
-        ? `${profileName.trim()}, ${opener}`
+      nameForOpener && nameForOpener.length > 0
+        ? `${nameForOpener}, ${opener}`
         : opener;
 
     setMessages([
@@ -176,6 +199,8 @@ export default function ChatPage() {
     messages.length,
     onboardingChecked,
     profileName,
+    onboardingComplete,
+    onboardingSkipped,
     singleThreadHydrated,
   ]);
 
@@ -185,24 +210,28 @@ export default function ChatPage() {
     if (canUseSubjects) return;
     if (messages.length === 0) return;
 
-    const trimmed = profileName.trim();
-    if (!trimmed) return;
+    const formatted = formatNameForOpener(
+      profileName,
+      onboardingComplete,
+      onboardingSkipped
+    );
+    if (!formatted) return;
 
     const first = messages[0];
     if (first.role !== "assistant") return;
     const alreadyNamed =
-      first.content.startsWith(`${trimmed},`) ||
-      first.content.startsWith(`Hi ${trimmed}`);
+      first.content.startsWith(`${formatted},`) ||
+      first.content.startsWith(`Hi ${formatted}`);
 
     if (alreadyNamed) return;
 
     setMessages((prev) => {
       if (prev.length === 0) return prev;
       const next = [...prev];
-      next[0] = { ...next[0], content: `${trimmed}, ${next[0].content}` };
+      next[0] = { ...next[0], content: `${formatted}, ${next[0].content}` };
       return next;
     });
-  }, [profileName, canUseSubjects, messages]);
+  }, [profileName, canUseSubjects, messages, onboardingComplete, onboardingSkipped]);
   // Load messages for active subject (Pro/Elite)
   useEffect(() => {
     if (!onboardingChecked) return;
@@ -250,6 +279,10 @@ export default function ChatPage() {
         if (data?.entitlements)
           setEntitlements(data.entitlements as Entitlements);
         if (data?.profile?.name) setProfileName(data.profile.name as string);
+        if (data?.profile?.onboardingComplete !== undefined)
+          setOnboardingComplete(Boolean(data.profile.onboardingComplete));
+        if (data?.profile?.onboardingSkipped !== undefined)
+          setOnboardingSkipped(Boolean(data.profile.onboardingSkipped));
 
         if (!aborted) {
           setMessages(
