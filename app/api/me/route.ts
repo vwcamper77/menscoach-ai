@@ -6,7 +6,7 @@ import { getEntitlements, Plan } from "@/lib/entitlements";
 import { getDailyUsage } from "@/lib/usage";
 import { getOrCreateUser } from "@/lib/users";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../../auth";
+import { authOptions } from "@/auth";
 
 const COOKIE_NAME = "mc_session_id";
 
