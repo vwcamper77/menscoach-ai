@@ -10,23 +10,78 @@ type Me = {
     name?: string;
     primaryFocus?: string;
     goal30?: string;
+    preferredMode?: string;
   };
 };
 
 export default function DashboardPage() {
   const [me, setMe] = useState<Me | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+
+  const [nameInput, setNameInput] = useState("");
+  const [focusInput, setFocusInput] = useState("");
+  const [goalInput, setGoalInput] = useState("");
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include", cache: "no-store" })
       .then((r) => r.json())
-      .then(setMe)
-      .catch(() => setMe(null));
+      .then((data) => setMe(data ?? null))
+      .catch(() => setMe(null))
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!me?.profile) return;
+    setNameInput(me.profile.name ?? "");
+    setFocusInput(me.profile.primaryFocus ?? "");
+    setGoalInput(me.profile.goal30 ?? "");
+  }, [me]);
 
   const name = me?.profile?.name || "Man";
   const focus = me?.profile?.primaryFocus || "Clarity";
   const goal = me?.profile?.goal30;
   const plan = me?.plan ?? "free";
+  const preferredMode = me?.profile?.preferredMode;
+
+  async function saveProfile() {
+    setSaving(true);
+    setSavedMessage(null);
+    try {
+      await fetch("/api/onboarding", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nameInput.trim(),
+          primaryFocus: focusInput.trim(),
+          goal30: goalInput.trim(),
+          preferredMode,
+        }),
+      });
+      setSavedMessage("Saved");
+      setMe((prev) =>
+        prev
+          ? {
+              ...prev,
+              profile: {
+                ...prev.profile,
+                name: nameInput.trim(),
+                primaryFocus: focusInput.trim(),
+                goal30: goalInput.trim(),
+                preferredMode,
+              },
+            }
+          : prev
+      );
+    } catch {
+      setSavedMessage("Could not save. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -67,7 +122,19 @@ export default function DashboardPage() {
       </section>
 
       {/* CONTENT */}
-      <section className="mx-auto max-w-5xl px-6 py-12 grid gap-6 md:grid-cols-3">
+      <section className="mx-auto max-w-5xl px-6 py-12">
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="text-sm text-slate-300">Snapshot</div>
+          <button
+            type="button"
+            onClick={() => setShowEditor((v) => !v)}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-emerald-400/60 hover:text-emerald-200 transition"
+          >
+            {showEditor ? "Close editor" : "Edit dashboard"}
+          </button>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
         {/* Focus */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
           <p className="text-xs uppercase tracking-widest text-slate-400">
@@ -106,16 +173,91 @@ export default function DashboardPage() {
             menscoach.ai remembers what matters when you upgrade.
           </p>
         </div>
+        </div>
       </section>
+
+      {/* Editable profile */}
+      {showEditor ? (
+        <section className="mx-auto max-w-4xl px-6 pb-12">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-slate-400">
+                  Edit dashboard
+                </p>
+                <p className="text-sm text-slate-300">Update what shows here.</p>
+              </div>
+              {savedMessage ? (
+                <span className="text-xs text-emerald-300">{savedMessage}</span>
+              ) : null}
+            </div>
+
+            <label className="block text-sm text-slate-200">
+              Name
+              <input
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="Your name"
+                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-base outline-none focus:border-emerald-500"
+              />
+            </label>
+
+            <label className="block text-sm text-slate-200">
+              Current focus
+              <input
+                value={focusInput}
+                onChange={(e) => setFocusInput(e.target.value)}
+                placeholder="e.g. Discipline"
+                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-base outline-none focus:border-emerald-500"
+              />
+            </label>
+
+            <label className="block text-sm text-slate-200">
+              30 day goal
+              <textarea
+                value={goalInput}
+                onChange={(e) => setGoalInput(e.target.value)}
+                rows={3}
+                placeholder="Example: Train 3x weekly and no doom scrolling after 10pm."
+                className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-base outline-none focus:border-emerald-500"
+              />
+            </label>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setNameInput(me?.profile?.name ?? "");
+                  setFocusInput(me?.profile?.primaryFocus ?? "");
+                  setGoalInput(me?.profile?.goal30 ?? "");
+                  setSavedMessage(null);
+                }}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-emerald-500/50 transition"
+                disabled={saving}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={saveProfile}
+                disabled={saving || loading}
+                className="rounded-xl bg-emerald-500 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60 transition"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {/* QUIET CTA */}
       <section className="mx-auto max-w-4xl px-6 pb-16">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/30 p-8 text-center">
           <p className="text-lg text-slate-200">
-            “Clarity comes before confidence.”
+            "Clarity comes before confidence."
           </p>
           <p className="mt-2 text-sm text-slate-400">
-            Speak when you’re ready.
+            Speak when you're ready.
           </p>
 
           <Link

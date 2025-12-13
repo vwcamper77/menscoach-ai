@@ -39,6 +39,8 @@ const openerByMode: Record<Mode, string[]> = {
   ],
 };
 
+const SINGLE_THREAD_STORAGE_PREFIX = "mc-chat-single-";
+
 function makeId(prefix: string) {
   const rand =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -52,6 +54,8 @@ export default function ChatPage() {
 
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [singleThreadHydrated, setSingleThreadHydrated] = useState(false);
   const [plan, setPlan] = useState<Plan>("free");
   const [entitlements, setEntitlements] = useState<Entitlements>(
     getEntitlements("free")
@@ -81,7 +85,10 @@ export default function ChatPage() {
 
     (async () => {
       try {
-        const res = await fetch("/api/me", { cache: "no-store" });
+        const res = await fetch("/api/me", {
+          cache: "no-store",
+          credentials: "include",
+        });
         const data = await res.json();
 
         if (cancelled) return;
@@ -90,6 +97,8 @@ export default function ChatPage() {
           router.replace("/onboarding");
           return;
         }
+
+        if (data?.profile?.name) setProfileName(data.profile.name as string);
 
         // hydrate plan + entitlements early
         if (data?.plan) setPlan(data.plan as Plan);
@@ -107,25 +116,93 @@ export default function ChatPage() {
     };
   }, [router]);
 
+  // Restore single-thread chat from localStorage (for free users)
+  useEffect(() => {
+    if (!onboardingChecked) return;
+    if (canUseSubjects) return;
+    if (singleThreadHydrated) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const sessionId = await getOrCreateSessionId();
+        if (!sessionId) return;
+        const key = `${SINGLE_THREAD_STORAGE_PREFIX}${sessionId}`;
+        const raw =
+          typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+        if (raw) {
+          const parsed = JSON.parse(raw) as ChatMessage[];
+          if (!cancelled && Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed);
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setSingleThreadHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onboardingChecked, canUseSubjects, singleThreadHydrated]);
+
   // Default opener for single-thread users
   useEffect(() => {
     if (!onboardingChecked) return;
     if (canUseSubjects) return;
     if (messages.length > 0) return;
+    if (!singleThreadHydrated) return;
 
     const defaultMode: Mode = "grounding";
     const openers = openerByMode[defaultMode];
     const opener = openers[Math.floor(Math.random() * openers.length)];
+    const prefixed =
+      profileName && profileName.trim().length > 0
+        ? `${profileName.trim()}, ${opener}`
+        : opener;
 
     setMessages([
       {
         id: makeId("assistant"),
         role: "assistant",
-        content: opener,
+        content: prefixed,
       },
     ]);
-  }, [canUseSubjects, messages.length, onboardingChecked]);
+  }, [
+    canUseSubjects,
+    messages.length,
+    onboardingChecked,
+    profileName,
+    singleThreadHydrated,
+  ]);
 
+  // If we learn the profile name after the opener was shown, patch the opener to include it.
+  useEffect(() => {
+    if (!profileName) return;
+    if (canUseSubjects) return;
+    if (messages.length === 0) return;
+
+    const trimmed = profileName.trim();
+    if (!trimmed) return;
+
+    const first = messages[0];
+    if (first.role !== "assistant") return;
+    const alreadyNamed =
+      first.content.startsWith(`${trimmed},`) ||
+      first.content.startsWith(`Hi ${trimmed}`);
+
+    if (alreadyNamed) return;
+
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      next[0] = { ...next[0], content: `${trimmed}, ${next[0].content}` };
+      return next;
+    });
+  }, [profileName, canUseSubjects, messages]);
   // Load messages for active subject (Pro/Elite)
   useEffect(() => {
     if (!onboardingChecked) return;
@@ -172,6 +249,7 @@ export default function ChatPage() {
         if (data?.plan) setPlan(data.plan as Plan);
         if (data?.entitlements)
           setEntitlements(data.entitlements as Entitlements);
+        if (data?.profile?.name) setProfileName(data.profile.name as string);
 
         if (!aborted) {
           setMessages(
@@ -297,6 +375,30 @@ export default function ChatPage() {
     [activeSubject, blockingError, canUseSubjects, isSending, onboardingChecked]
   );
 
+  // Persist single-thread messages locally so navigation doesn't wipe them
+  useEffect(() => {
+    if (!onboardingChecked) return;
+    if (canUseSubjects) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const sessionId = await getOrCreateSessionId();
+        if (!sessionId) return;
+        const key = `${SINGLE_THREAD_STORAGE_PREFIX}${sessionId}`;
+        if (!cancelled && typeof window !== "undefined") {
+          window.localStorage.setItem(key, JSON.stringify(messages));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, onboardingChecked, canUseSubjects]);
+
   const placeholder = canUseSubjects
     ? activeSubject
       ? `Chatting in ${activeSubject.title}`
@@ -344,6 +446,21 @@ export default function ChatPage() {
             isSending={isSending}
             placeholder={placeholder}
             onSend={handleSend}
+            footerBanner={
+              upgradeCTA ? (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-sm text-amber-100">
+                  <div className="flex-1">
+                    {blockingError?.message ?? "Upgrade required to continue."}
+                  </div>
+                  <a
+                    href="/pricing"
+                    className="inline-flex items-center rounded-xl bg-amber-400 text-slate-950 px-3 py-2 text-xs font-semibold hover:bg-amber-300"
+                  >
+                    View plans
+                  </a>
+                </div>
+              ) : null
+            }
             header={
               <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
                 <div className="text-xs text-slate-300">
@@ -383,21 +500,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {upgradeCTA ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 bg-amber-500/20 border-t border-amber-400/50 px-4 py-3">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-            <div className="text-sm text-amber-100">
-              {blockingError?.message ?? "Upgrade required to continue."}
-            </div>
-            <a
-              href="/pricing"
-              className="inline-flex items-center rounded-lg bg-amber-400 text-slate-950 px-4 py-2 text-sm font-semibold hover:bg-amber-300"
-            >
-              View plans
-            </a>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

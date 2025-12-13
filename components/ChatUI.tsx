@@ -1,12 +1,7 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVisualViewportOffset } from "@/utils/useVisualViewportOffset";
 
 type Role = "user" | "assistant" | "system";
 
@@ -25,6 +20,7 @@ type Props = {
   sidebar?: React.ReactNode;
   activeSubjectId?: string | null;
   disableInputMessage?: string | null;
+  footerBanner?: React.ReactNode;
 };
 
 export default function ChatUI({
@@ -36,6 +32,7 @@ export default function ChatUI({
   sidebar,
   activeSubjectId = null,
   disableInputMessage = null,
+  footerBanner = null,
 }: Props) {
   const [text, setText] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -47,37 +44,7 @@ export default function ChatUI({
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, []);
 
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    const setOffsetVar = (offset: number) => {
-      document.documentElement.style.setProperty(
-        "--mc-vv-offset",
-        `${Math.max(0, offset)}px`
-      );
-    };
-
-    let lastOffset = 0;
-
-    const update = () => {
-      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      if (offset === lastOffset) return;
-      lastOffset = offset;
-      setOffsetVar(offset);
-      // Keep the latest message visible when the keyboard opens/closes.
-      scrollToBottom();
-    };
-
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-      setOffsetVar(0);
-    };
-  }, [scrollToBottom]);
+  useVisualViewportOffset(scrollToBottom);
 
   const messageCount = messages.length;
   useEffect(() => {
@@ -89,12 +56,19 @@ export default function ChatUI({
     return text.trim().length > 0 && !isSending;
   }, [text, isSending, disableInputMessage]);
 
+  // Auto-dismiss keyboard when sending to avoid covering AI replies on mobile.
+  useEffect(() => {
+    if (isSending) {
+      inputRef.current?.blur();
+    }
+  }, [isSending]);
+
   async function handleSend() {
     const value = text.trim();
     if (!value || isSending || disableInputMessage) return;
 
     setText("");
-    requestAnimationFrame(() => inputRef.current?.focus());
+    requestAnimationFrame(() => inputRef.current?.blur());
     await onSend({ text: value, subjectId: activeSubjectId });
   }
 
@@ -119,6 +93,9 @@ export default function ChatUI({
         <div
           className="flex-1 min-h-0 w-full overflow-y-auto px-4 py-4"
           ref={scrollerRef}
+          style={{
+            paddingBottom: "calc(120px + var(--mc-vv-offset, 0px))",
+          }}
         >
           <div className="mx-auto w-full max-w-5xl space-y-3">
             {messages.map((m) => (
@@ -149,10 +126,16 @@ export default function ChatUI({
         </div>
 
         <div
-          className="w-full border-t border-slate-800 bg-slate-950/90 backdrop-blur px-4 py-3"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
+          className="sticky bottom-0 w-full border-t border-slate-800 bg-slate-950/90 backdrop-blur px-4 py-3"
+          style={{
+            paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)",
+            marginBottom: "var(--mc-vv-offset, 0px)",
+          }}
         >
           <div className="mx-auto w-full max-w-5xl">
+            {footerBanner ? (
+              <div className="mb-3">{footerBanner}</div>
+            ) : null}
             {disableInputMessage ? (
               <div className="mb-2 text-xs text-amber-400">{disableInputMessage}</div>
             ) : null}
