@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# menscoach.ai
 
-## Getting Started
+menscoach.ai is a Next.js app for a private AI coach built on Better Masculine Man principles. It handles onboarding, plan entitlements, subject-based threads, and Stripe upgrades while talking to OpenAI for replies.
 
-First, run the development server:
+## Features
+- App Router UI: landing page, onboarding flow, subject-based chat, dashboard, and pricing.
+- Session + profile: httpOnly `mc_session_id` cookie, onboarding profile persisted in Firestore.
+- Coaching chat: `/api/chat` sends trimmed history and mode prompts to OpenAI gpt-4.1 with usage limits and memory.
+- Subjects (Pro+): topic threads with mode selection, history, and persistent memory per subject.
+- Billing hooks: Stripe Checkout session starter and webhook handlers to flip plans; pricing UI falls back to chat when checkout is unavailable.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Tech stack
+- Next.js 16 (App Router) with React 19 and Tailwind CSS 4.
+- OpenAI Responses API (gpt-4.1).
+- Firebase Admin + Firestore for sessions, memory, subjects, usage, and user profiles.
+- Stripe for subscriptions (starter / pro / elite).
+- TypeScript + ESLint.
+
+## Prerequisites
+- Node 18+ and npm 10+.
+- Firebase project with Firestore enabled.
+- OpenAI API key.
+- Stripe account with three recurring prices.
+
+## Environment
+Create `.env.local` with your values:
+
+```
+OPENAI_API_KEY=sk-...
+
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=your-service-account-email
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PRICE_STARTER=price_...
+STRIPE_PRICE_PRO=price_...
+STRIPE_PRICE_ELITE=price_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Notes:
+- Keep the `\n` escapes in `FIREBASE_PRIVATE_KEY` so the key parses correctly.
+- The app sets the `mc_session_id` cookie; webhook writes plan data into the `mc_users` doc keyed by that id.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Run locally
+```
+npm install
+npm run dev
+```
+Visit http://localhost:3000.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Other scripts: `npm run lint`, `npm run build`, `npm run start`.
 
-## Learn More
+## Data model
+- `mc_users`: plan, onboarding profile, stripe ids.
+- `mc_sessions`: single-thread memory (name, goals, current challenge, recent turns).
+- `mc_subjects/{subject}/messages`: per-subject threads for Pro/Elite.
+- `mc_usage`: daily message counters used for plan limits.
 
-To learn more about Next.js, take a look at the following resources:
+## API map
+- `GET/POST /api/session` — issues the httpOnly session cookie.
+- `GET /api/me` — returns plan, entitlements, usage, onboarding profile.
+- `POST /api/onboarding` — saves profile and marks onboarding complete.
+- `POST /api/chat` — main chat handler; respects entitlements and subject modes.
+- `GET/POST /api/subjects` — list/create subjects (Pro+).
+- `GET /api/subjects/:id/messages` — fetch subject history.
+- `POST /api/stripe/checkout` — starts Checkout for a plan; falls back to chat when Stripe is not configured.
+- `POST /api/stripe/webhook` — updates plans on subscription events.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Stripe webhook in dev
+```
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+Copy the printed signing secret into `STRIPE_WEBHOOK_SECRET`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Resetting
+If you want a clean slate locally, call `POST /api/session/reset` to drop the cookie; the next `/api/session` call will issue a new session id.
