@@ -1,60 +1,43 @@
 // utils/sessionId.ts
-const KEY = "mc_session_id";
+let cachedSessionId: string | null = null;
+let inFlight: Promise<string> | null = null;
 
-function getCookie(name: string) {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-  return match ? decodeURIComponent(match[2]) : null;
-}
+async function fetchServerSession(): Promise<string> {
+  const res = await fetch("/api/session", {
+    method: "GET",
+    credentials: "include",
+  });
 
-function setCookie(name: string, value: string) {
-  if (typeof document === "undefined") return;
-  // 90 days
-  const maxAge = 60 * 60 * 24 * 90;
-  document.cookie = `${name}=${encodeURIComponent(
-    value
-  )}; path=/; max-age=${maxAge}; SameSite=Lax`;
-}
-
-function safeGetLocalStorage(key: string) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSetLocalStorage(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function getOrCreateSessionId() {
-  // 1) try localStorage
-  const existingLS = safeGetLocalStorage(KEY);
-  if (existingLS) return existingLS;
-
-  // 2) try cookie
-  const existingCookie = getCookie(KEY);
-  if (existingCookie) {
-    // attempt to restore to localStorage too
-    safeSetLocalStorage(KEY, existingCookie);
-    return existingCookie;
+  if (!res.ok) {
+    throw new Error("Failed to establish session");
   }
 
-  // 3) create new
-  const id =
-    (typeof crypto !== "undefined" && "randomUUID" in crypto)
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const data = await res.json();
+  if (typeof data?.sessionId !== "string") {
+    throw new Error("Session missing in response");
+  }
 
-  // store in both (cookie always, localStorage best-effort)
-  setCookie(KEY, id);
-  safeSetLocalStorage(KEY, id);
+  return data.sessionId;
+}
 
-  return id;
+export async function getOrCreateSessionId(): Promise<string> {
+  if (typeof window === "undefined") {
+    // server components should never rely on this
+    return "server";
+  }
+
+  if (cachedSessionId) return cachedSessionId;
+  if (inFlight) return inFlight;
+
+  inFlight = (async () => {
+    try {
+      const sessionId = await fetchServerSession();
+      cachedSessionId = sessionId;
+      return sessionId;
+    } finally {
+      inFlight = null;
+    }
+  })();
+
+  return inFlight;
 }

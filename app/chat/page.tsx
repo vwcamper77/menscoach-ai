@@ -1,13 +1,13 @@
-// app/chat/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import ChatUI, { ChatMessage } from "@/components/ChatUI";
+import SubjectsSidebar, { Subject } from "@/components/SubjectsSidebar";
 import { getOrCreateSessionId } from "@/utils/sessionId";
-
-type Message = {
-  role: "user" | "assistant";
-  content: string;
-};
+import { Entitlements, getEntitlements, Plan } from "@/lib/entitlements";
+import { Mode } from "@/lib/modes";
+import TopNav from "@/components/TopNav";
 
 type CoachingMode =
   | "grounding"
@@ -16,340 +16,388 @@ type CoachingMode =
   | "business"
   | "purpose";
 
-const MODES: { id: CoachingMode; label: string; hint: string }[] = [
-  {
-    id: "grounding",
-    label: "Grounding",
-    hint: "Stress, overthinking, feeling off centre",
-  },
-  {
-    id: "discipline",
-    label: "Discipline",
-    hint: "Habits, consistency, self sabotage",
-  },
-  {
-    id: "relationships",
-    label: "Relationships",
-    hint: "Partner, dating, family dynamics",
-  },
-  {
-    id: "business",
-    label: "Business",
-    hint: "Work, leadership, decisions",
-  },
-  {
-    id: "purpose",
-    label: "Purpose",
-    hint: "Direction, mission, what is next",
-  },
-];
+const openerByMode: Record<Mode, string[]> = {
+  grounding: [
+    "Slow down for a moment. What feels heaviest for you right now?",
+    "Before we try to fix anything, what has really been sitting on your chest lately?",
+  ],
+  discipline: [
+    "Where are you slipping on the standards you expect of yourself?",
+    "What is one habit or pattern you know is holding you back at the moment?",
+  ],
+  relationships: [
+    "Where in your relationships do you feel off centre or reactive?",
+    "How satisfied are you with how you are showing up in your closest relationships?",
+  ],
+  business: [
+    "Briefly describe your work and the main pressure or decision you are facing.",
+    "What is the toughest call you are sitting on in your work or business right now?",
+  ],
+  purpose: [
+    "If you zoomed out on your life, what question about direction keeps coming back?",
+    "Where in your life do you feel most off track or unsure about your path?",
+  ],
+};
+
+function makeId(prefix: string) {
+  const rand =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${rand}`;
+}
 
 export default function ChatPage() {
-  // Variations
-  const headerVariants = [
-    "menscoach.ai · Chat",
-    "menscoach.ai · Coaching Chat",
-    "menscoach.ai · Your Space",
-    "menscoach.ai · Private Coaching",
-    "menscoach.ai · The Work",
-  ];
+  const router = useRouter();
 
-  const disclaimerVariants = [
-    "Not a therapist. If you are in crisis, contact emergency services.",
-    "Coaching only, not therapy. For emergencies, contact local services.",
-    "Supportive conversation, not clinical care. In crisis, contact emergency services.",
-    "Not therapy. For crisis situations, contact emergency services.",
-  ];
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
 
-  const openerByMode: Record<CoachingMode, string[]> = {
-    grounding: [
-      "Slow down for a moment. What feels heaviest for you right now?",
-      "Before we try to fix anything, what has really been sitting on your chest lately?",
-    ],
-    discipline: [
-      "Where are you slipping on the standards you expect of yourself?",
-      "What is one habit or pattern you know is holding you back at the moment?",
-    ],
-    relationships: [
-      "Where in your relationships do you feel off centre or reactive?",
-      "How satisfied are you with how you are showing up in your closest relationships?",
-    ],
-    business: [
-      "Briefly describe your work and the main pressure or decision you are facing.",
-      "What is the toughest call you are sitting on in your work or business right now?",
-    ],
-    purpose: [
-      "If you zoomed out on your life, what question about direction keeps coming back?",
-      "Where in your life do you feel most off track or unsure about your path?",
-    ],
-  };
-
-  // State
-  const [mode, setMode] = useState<CoachingMode>("grounding");
-  const [headerText, setHeaderText] = useState<string>(headerVariants[0]);
-  const [disclaimerText, setDisclaimerText] = useState<string>(
-    disclaimerVariants[0]
+  const [plan, setPlan] = useState<Plan>("free");
+  const [entitlements, setEntitlements] = useState<Entitlements>(
+    getEntitlements("free")
   );
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: openerByMode["grounding"][0],
-    },
-  ]);
-  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [blockingError, setBlockingError] = useState<{
+    code: string;
+    message: string;
+  } | null>(null);
 
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const inputContainerRef = useRef<HTMLDivElement | null>(null);
-  const [bottomPadding, setBottomPadding] = useState<number>(24);
+  const canUseSubjects = useMemo(
+    () => (entitlements.maxSubjects ?? 0) > 0,
+    [entitlements]
+  );
 
-  // Randomise header/disclaimer/opener after hydration
+  // Ensure session exists
   useEffect(() => {
-    const randomHeader =
-      headerVariants[Math.floor(Math.random() * headerVariants.length)];
-    const randomDisclaimer =
-      disclaimerVariants[
-        Math.floor(Math.random() * disclaimerVariants.length)
-      ];
-
-    const groundingOpeners = openerByMode["grounding"];
-    const randomOpener =
-      groundingOpeners[
-        Math.floor(Math.random() * groundingOpeners.length)
-      ];
-
-    setHeaderText(randomHeader);
-    setDisclaimerText(randomDisclaimer);
-
-    setMessages((prev) => {
-      if (!prev.length) {
-        return [{ role: "assistant", content: randomOpener }];
-      }
-      const [first, ...rest] = prev;
-      if (first.role !== "assistant") return prev;
-      return [{ ...first, content: randomOpener }, ...rest];
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void getOrCreateSessionId();
   }, []);
 
-  // Auto scroll
+  // Onboarding gate
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [messages]);
+    let cancelled = false;
 
-  // Keep the last message visible above the input (handles keyboard/show-hide)
-  useEffect(() => {
-    const inputEl = inputContainerRef.current;
-    if (!inputEl) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/me", { cache: "no-store" });
+        const data = await res.json();
 
-    const updateBottomPadding = () => {
-      const inputHeight = inputEl.getBoundingClientRect().height;
-      const nextPadding = Math.min(Math.max(20, inputHeight + 6), 120);
-      setBottomPadding((prev) =>
-        Math.abs(prev - nextPadding) > 1 ? nextPadding : prev
-      );
+        if (cancelled) return;
 
-      const el = scrollRef.current;
-      if (el) {
-        el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+        if (!data?.profile?.onboardingComplete) {
+          router.replace("/onboarding");
+          return;
+        }
+
+        // hydrate plan + entitlements early
+        if (data?.plan) setPlan(data.plan as Plan);
+        if (data?.entitlements)
+          setEntitlements(data.entitlements as Entitlements);
+      } catch {
+        // If /api/me fails, do not block chat forever
+      } finally {
+        if (!cancelled) setOnboardingChecked(true);
       }
-    };
-
-    const resizeObserver = new ResizeObserver(updateBottomPadding);
-    resizeObserver.observe(inputEl);
-
-    const vv = window.visualViewport;
-    if (vv) {
-      vv.addEventListener("resize", updateBottomPadding);
-      vv.addEventListener("scroll", updateBottomPadding);
-    } else {
-      window.addEventListener("resize", updateBottomPadding);
-    }
-
-    updateBottomPadding();
+    })();
 
     return () => {
-      resizeObserver.disconnect();
-      if (vv) {
-        vv.removeEventListener("resize", updateBottomPadding);
-        vv.removeEventListener("scroll", updateBottomPadding);
-      } else {
-        window.removeEventListener("resize", updateBottomPadding);
+      cancelled = true;
+    };
+  }, [router]);
+
+  // Default opener for single-thread users
+  useEffect(() => {
+    if (!onboardingChecked) return;
+    if (canUseSubjects) return;
+    if (messages.length > 0) return;
+
+    const defaultMode: Mode = "grounding";
+    const openers = openerByMode[defaultMode];
+    const opener = openers[Math.floor(Math.random() * openers.length)];
+
+    setMessages([
+      {
+        id: makeId("assistant"),
+        role: "assistant",
+        content: opener,
+      },
+    ]);
+  }, [canUseSubjects, messages.length, onboardingChecked]);
+
+  // Load messages for active subject (Pro/Elite)
+  useEffect(() => {
+    if (!onboardingChecked) return;
+    if (!canUseSubjects) return;
+
+    if (!activeSubject) {
+      setMessages([]);
+      return;
+    }
+
+    let aborted = false;
+
+    const loadMessages = async () => {
+      setLoadingMessages(true);
+      try {
+        const sessionId = await getOrCreateSessionId();
+
+        const res = await fetch(`/api/subjects/${activeSubject.id}/messages`, {
+          credentials: "include",
+          headers: {
+            ...(sessionId ? { "x-session-id": sessionId } : {}),
+          },
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          const code = data?.error?.code as string | undefined;
+          const message = data?.error?.message as string | undefined;
+
+          if (code === "UPGRADE_REQUIRED" || code === "LIMIT_REACHED") {
+            setBlockingError({ code, message: message ?? "Upgrade required." });
+          }
+          throw new Error(message ?? "Could not load messages.");
+        }
+
+        const loaded =
+          (data?.messages as {
+            role: "user" | "assistant";
+            content: string;
+            createdAt?: number;
+          }[]) ?? [];
+
+        if (data?.plan) setPlan(data.plan as Plan);
+        if (data?.entitlements)
+          setEntitlements(data.entitlements as Entitlements);
+
+        if (!aborted) {
+          setMessages(
+            loaded.map((m, idx) => ({
+              id: `${activeSubject.id}-${m.createdAt ?? idx}`,
+              role: m.role,
+              content: m.content,
+            }))
+          );
+        }
+      } catch (err: any) {
+        if (!aborted) {
+          setMessages([
+            {
+              id: makeId("assistant-error"),
+              role: "assistant",
+              content: err?.message ?? "Could not load messages.",
+            },
+          ]);
+        }
+      } finally {
+        if (!aborted) {
+          setLoadingMessages(false);
+        }
       }
     };
-  }, []);
 
-  // Send
-  const handleSend = async () => {
-    const trimmed = input.trim();
-    if (!trimmed || isSending) return;
+    loadMessages();
 
-    const sessionId = getOrCreateSessionId();
-    const newUserMessage: Message = { role: "user", content: trimmed };
+    return () => {
+      aborted = true;
+    };
+  }, [activeSubject, canUseSubjects, onboardingChecked]);
 
-    setMessages((prev) => [...prev, newUserMessage]);
-    setInput("");
-    setIsSending(true);
+  const handleSend = useCallback(
+    async ({ text }: { text: string; subjectId?: string | null }) => {
+      if (!onboardingChecked) return;
+      if (isSending) return;
+      if (blockingError) return;
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId,
-          mode,
-          messages: [{ role: "user", content: trimmed }],
-        }),
-      });
+      const sessionId = await getOrCreateSessionId();
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("Backend error:", res.status, text);
-        throw new Error("Request failed");
+      const payload: any = {
+        messages: [{ role: "user" as const, content: text }],
+      };
+
+      if (canUseSubjects) {
+        if (!activeSubject) {
+          setBlockingError({
+            code: "SUBJECT_REQUIRED",
+            message: "Select or create a subject to start chatting.",
+          });
+          return;
+        }
+        payload.subjectId = activeSubject.id;
+      } else {
+        payload.mode = "grounding" as CoachingMode;
       }
 
-      const data = await res.json();
-      const reply = (data.reply as string) || "Something went wrong.";
+      const userMessage: ChatMessage = {
+        id: makeId("user"),
+        role: "user",
+        content: text,
+      };
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: reply },
-      ]);
-    } catch (err) {
-      console.error(err);
-      setMessages((prev) => [
-        ...prev,
-        {
+      setMessages((prev) => [...prev, userMessage]);
+      setIsSending(true);
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(sessionId ? { "x-session-id": sessionId } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+
+        if (data?.plan) setPlan(data.plan as Plan);
+        if (data?.entitlements)
+          setEntitlements(data.entitlements as Entitlements);
+
+        if (!res.ok) {
+          const code = data?.error?.code as string | undefined;
+          const message = data?.error?.message as string | undefined;
+
+          if (code === "LIMIT_REACHED" || code === "UPGRADE_REQUIRED") {
+            setBlockingError({
+              code,
+              message: message ?? "Upgrade required.",
+            });
+          }
+          throw new Error(message ?? "Request failed.");
+        }
+
+        const reply = (data.reply as string) ?? "Something went wrong.";
+
+        const assistantMessage: ChatMessage = {
+          id: makeId("assistant"),
           role: "assistant",
-          content:
-            "I hit a technical issue trying to reply. Try again in a moment.",
-        },
-      ]);
-    } finally {
-      setIsSending(false);
-    }
-  };
+          content: reply,
+        };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+        setMessages((prev) => [...prev, assistantMessage]);
+      } catch (err: any) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: makeId("assistant-error"),
+            role: "assistant",
+            content:
+              err?.message ??
+              "I hit a technical issue trying to reply. Try again in a moment.",
+          },
+        ]);
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [activeSubject, blockingError, canUseSubjects, isSending, onboardingChecked]
+  );
 
-  // UI
+  const placeholder = canUseSubjects
+    ? activeSubject
+      ? `Chatting in ${activeSubject.title}`
+      : "Pick or create a subject to start."
+    : "Type what is on your mind...";
+
+  const disableInputMessage = blockingError
+    ? blockingError.message ?? "Upgrade required."
+    : canUseSubjects && !activeSubject
+    ? "Select or create a subject to start chatting."
+    : null;
+
+  const upgradeCTA =
+    blockingError &&
+    (blockingError.code === "LIMIT_REACHED" ||
+      blockingError.code === "UPGRADE_REQUIRED");
+
+  if (!onboardingChecked) {
+    return (
+      <main className="h-dvh bg-slate-950 text-slate-50 flex items-center justify-center px-6">
+        <div className="text-sm text-slate-400">Loading...</div>
+      </main>
+    );
+  }
+
   return (
     <main className="h-dvh bg-slate-950 text-slate-50 flex flex-col">
-      {/* Sticky header */}
-      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur px-3 py-2 sm:px-4 sm:py-3">
-        <div className="mx-auto flex w-full max-w-4xl flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
-          <h1 className="text-[11px] sm:text-sm font-semibold text-slate-100 leading-snug">
-            {headerText}
-          </h1>
-          <p className="text-[10px] sm:text-[11px] text-slate-400 text-left sm:text-right leading-snug">
-            {disclaimerText}
-          </p>
-        </div>
-      </header>
+      <TopNav />
 
-      {/* Mode selector */}
-      <div className="border-b border-slate-800 bg-slate-950/95 px-2 sm:px-4 py-2">
-        <div className="mx-auto w-full max-w-4xl flex flex-nowrap overflow-x-auto hide-scrollbar justify-start gap-1.5 sm:gap-2">
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setMode(m.id)}
-              className={`px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] border whitespace-nowrap transition ${
-                mode === m.id
-                  ? "bg-emerald-500 text-slate-950 border-emerald-400"
-                  : "bg-slate-900 text-slate-300 border-slate-700 hover:border-emerald-400/70"
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
+      <div className="flex-1 flex flex-col">
+        <div className="flex-1 w-full mx-auto flex flex-col">
+          <ChatUI
+            messages={
+              loadingMessages
+                ? [
+                    {
+                      id: "loading",
+                      role: "assistant",
+                      content: "Loading messages...",
+                    },
+                    ...messages,
+                  ]
+                : messages
+            }
+            isSending={isSending}
+            placeholder={placeholder}
+            onSend={handleSend}
+            header={
+              <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
+                <div className="text-xs text-slate-300">
+                  Plan: <span className="font-semibold uppercase">{plan}</span>
+                </div>
+
+                {canUseSubjects ? (
+                  <div className="text-xs text-slate-400">
+                    {activeSubject
+                      ? `Subject: ${activeSubject.title} (${activeSubject.mode})`
+                      : "Select or create a subject to begin."}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400">
+                    Single thread. {entitlements.dailyMessageLimit ?? "Unlimited"}{" "}
+                    messages/day.
+                  </div>
+                )}
+              </div>
+            }
+            sidebar={
+              canUseSubjects ? (
+                <SubjectsSidebar
+                  activeSubjectId={activeSubject?.id}
+                  onSelect={(subject) => {
+                    setBlockingError(null);
+                    setActiveSubject(subject);
+                  }}
+                  onPlanResolved={(newPlan) => setPlan(newPlan)}
+                  onEntitlementsResolved={(ent) => setEntitlements(ent)}
+                />
+              ) : null
+            }
+            activeSubjectId={activeSubject?.id ?? null}
+            disableInputMessage={disableInputMessage}
+          />
         </div>
-        <p className="mx-auto w-full max-w-4xl mt-1 text-[10px] sm:text-[11px] text-slate-500 text-center sm:text-left">
-          {MODES.find((m) => m.id === mode)?.hint}
-        </p>
       </div>
 
-      {/* Chat container */}
-      <div className="flex-1 w-full max-w-4xl mx-auto flex flex-col px-2 sm:px-4 pb-2 sm:pb-4 pt-2 sm:pt-3 min-h-0">
-        {/* Messages */}
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 space-y-3 min-h-0"
-          style={{ paddingBottom: bottomPadding }}
-        >
-          {messages.map((m, index) => (
-            <div
-              key={index}
-              className={`flex ${
-                m.role === "user" ? "justify-end" : "justify-start"
-              }`}
+      {upgradeCTA ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 bg-amber-500/20 border-t border-amber-400/50 px-4 py-3">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+            <div className="text-sm text-amber-100">
+              {blockingError?.message ?? "Upgrade required to continue."}
+            </div>
+            <a
+              href="/pricing"
+              className="inline-flex items-center rounded-lg bg-amber-400 text-slate-950 px-4 py-2 text-sm font-semibold hover:bg-amber-300"
             >
-              <div
-                className={`max-w-[85%] sm:max-w-[80%] rounded-2xl px-3 py-2 text-[13px] sm:text-sm leading-relaxed ${
-                  m.role === "user"
-                    ? "bg-emerald-500 text-slate-950"
-                    : "bg-slate-800 text-slate-50"
-                }`}
-              >
-                {m.content}
-              </div>
-            </div>
-          ))}
-
-          {isSending && (
-            <div className="flex justify-start">
-              <div className="bg-slate-800 text-slate-400 rounded-2xl px-3 py-2 text-[13px] sm:text-sm animate-pulse">
-                menscoach.ai is thinking…
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div
-          ref={inputContainerRef}
-          className="sticky bottom-0 left-0 right-0 pt-2 sm:pt-3 bg-slate-950/95 backdrop-blur z-20 border-t border-slate-800"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
-        >
-          <div className="mx-auto w-full max-w-4xl px-2 sm:px-4">
-            <div className="flex items-end gap-2 sm:gap-3">
-              <textarea
-                rows={1}
-                className="flex-1 min-w-0 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-base sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
-                placeholder="Type what is on your mind…"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-              />
-
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={isSending || !input.trim()}
-                className="shrink-0 rounded-2xl bg-emerald-500 px-4 py-2 text-base sm:text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {isSending ? "…" : "Send"}
-              </button>
-            </div>
-
-            <p className="mt-1 sm:mt-2 text-[10px] sm:text-[11px] text-slate-500">
-              menscoach.ai helps you reflect and plan small next steps. It
-              cannot diagnose or replace professional support.
-            </p>
+              View plans
+            </a>
           </div>
         </div>
-      </div>
+      ) : null}
     </main>
   );
 }

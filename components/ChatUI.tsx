@@ -14,8 +14,11 @@ type Props = {
   messages: ChatMessage[];
   isSending?: boolean;
   placeholder?: string;
-  onSend: (text: string) => Promise<void> | void;
+  onSend: (payload: { text: string; subjectId?: string | null }) => Promise<void> | void;
   header?: React.ReactNode;
+  sidebar?: React.ReactNode;
+  activeSubjectId?: string | null;
+  disableInputMessage?: string | null;
 };
 
 export default function ChatUI({
@@ -24,10 +27,13 @@ export default function ChatUI({
   placeholder = "Type what is on your mind...",
   onSend,
   header,
+  sidebar,
+  activeSubjectId = null,
+  disableInputMessage = null,
 }: Props) {
   const [text, setText] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -55,7 +61,6 @@ export default function ChatUI({
     };
   }, []);
 
-  // Auto-scroll ONLY when a message is appended
   const messageCount = messages.length;
   useEffect(() => {
     const el = scrollerRef.current;
@@ -64,65 +69,93 @@ export default function ChatUI({
   }, [messageCount]);
 
   const canSend = useMemo(() => {
+    if (disableInputMessage) return false;
     return text.trim().length > 0 && !isSending;
-  }, [text, isSending]);
+  }, [text, isSending, disableInputMessage]);
 
   async function handleSend() {
     const value = text.trim();
-    if (!value || isSending) return;
+    if (!value || isSending || disableInputMessage) return;
 
     setText("");
     requestAnimationFrame(() => inputRef.current?.focus());
-    await onSend(value);
+    await onSend({ text: value, subjectId: activeSubjectId });
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   }
 
   return (
-    <div className="mc-chat-root">
-      {header ? <div className="mc-chat-header">{header}</div> : null}
+    <div className="flex h-full w-full bg-slate-950 text-slate-50">
+      {sidebar ? <div className="hidden md:block">{sidebar}</div> : null}
 
-      <div ref={scrollerRef} className="mc-chat-messages" aria-live="polite">
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`mc-bubble-row ${
-              m.role === "user" ? "is-user" : "is-assistant"
-            }`}
-          >
-            <div className="mc-bubble">{m.content}</div>
+      <div className="flex-1 flex flex-col items-center">
+        {header ? (
+          <div className="w-full border-b border-slate-800 bg-slate-950/95 backdrop-blur px-3 py-2">
+            <div className="mx-auto w-full max-w-5xl">{header}</div>
           </div>
-        ))}
-      </div>
+        ) : null}
 
-      <div className="mc-chat-inputbar">
-        <input
-          ref={inputRef}
-          className="mc-chat-input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={placeholder}
-          autoFocus
-          inputMode="text"
-          autoCorrect="on"
-          autoCapitalize="sentences"
-        />
+        <div className="flex-1 w-full overflow-y-auto px-4 py-4" ref={scrollerRef}>
+          <div className="mx-auto w-full max-w-5xl space-y-3">
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`w-fit max-w-[680px] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    m.role === "user"
+                      ? "bg-emerald-500 text-slate-950"
+                      : "bg-slate-800 text-slate-50"
+                  }`}
+                >
+                  {m.content}
+                </div>
+              </div>
+            ))}
 
-        <button
-          type="button"
-          className="mc-chat-send"
-          onClick={handleSend}
-          disabled={!canSend}
-          aria-label="Send"
-        >
-          Send
-        </button>
+            {isSending ? (
+              <div className="flex justify-start">
+                <div className="bg-slate-800 text-slate-400 rounded-2xl px-3 py-2 text-sm animate-pulse">
+                  menscoach.ai is thinking...
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="w-full border-t border-slate-800 bg-slate-950/90 backdrop-blur px-4 py-3">
+          <div className="mx-auto w-full max-w-5xl">
+            {disableInputMessage ? (
+              <div className="mb-2 text-xs text-amber-400">{disableInputMessage}</div>
+            ) : null}
+            <div className="flex items-end gap-3">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                className="flex-1 min-w-0 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/70 resize-none"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                disabled={isSending || !!disableInputMessage}
+              />
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!canSend}
+                className="shrink-0 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {isSending ? "..." : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

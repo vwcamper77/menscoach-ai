@@ -1,19 +1,21 @@
 // app/page.tsx
+import TopNav from "@/components/TopNav";
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-950 text-white flex flex-col">
+      <TopNav />
 
       {/* HERO SECTION */}
       <section className="relative flex flex-col items-center justify-center min-h-[80vh] px-6 text-center overflow-hidden">
         {/* Animated Gradient Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-slate-900 to-slate-950 animate-gradient" />
+        <div className="absolute inset-0 bg-linear-to-br from-emerald-500/10 via-slate-900 to-slate-950 animate-gradient" />
 
         {/* Floating AI Orb */}
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-40 h-40 rounded-full bg-emerald-500/20 blur-3xl animate-pulse-slow" />
 
         {/* Glow line */}
-        <div className="absolute top-1/2 left-1/2 w-[120%] h-px bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent animate-glow" />
+        <div className="absolute top-1/2 left-1/2 w-[120%] h-px bg-linear-to-r from-transparent via-emerald-500/30 to-transparent animate-glow" />
 
         {/* Content */}
         <div className="relative z-10 max-w-3xl mx-auto space-y-6 mt-10">
@@ -28,7 +30,7 @@ export default function Home() {
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-300 max-w-2xl mx-auto">
-            menscoach.ai is a spin off from Better Masculine Man. 
+            menscoach.ai is a spin off from Better Masculine Man.
             It carries the same core values and turns them into a private, on demand coaching conversation for men who want more clarity, discipline, and direction.
           </p>
 
@@ -44,6 +46,15 @@ export default function Home() {
               className="px-6 py-3 rounded-xl border border-slate-600 hover:border-emerald-400 hover:text-emerald-400 transition"
             >
               Explore The Values
+            </a>
+          </div>
+
+          <div className="pt-2">
+            <a
+              href="/pricing"
+              className="inline-flex items-center justify-center text-sm text-slate-300 hover:text-emerald-400 transition"
+            >
+              View pricing
             </a>
           </div>
 
@@ -87,6 +98,116 @@ export default function Home() {
                 Sam, 29  - Father of two
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PRICING PREVIEW (BEST PLACEMENT: AFTER SOCIAL PROOF) */}
+      <section className="relative py-16 px-6 bg-slate-950 border-t border-slate-800" id="pricing">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-10">
+            <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">
+              Pricing
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold mt-3">
+              Simple tiers. Clear upgrades.
+            </h2>
+            <p className="text-slate-400 mt-3 max-w-2xl mx-auto">
+              Start free. Upgrade when you want structure, coach modes, and memory that compounds.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {/* Free */}
+            <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800">
+              <h3 className="text-lg font-semibold">Free</h3>
+              <p className="text-3xl font-bold mt-2">£0</p>
+              <p className="text-slate-400 text-sm mt-1">Try the coach</p>
+              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+                <li>10 messages per day</li>
+                <li>Single chat thread</li>
+                <li>Default coach mode</li>
+                <li>No memory or summaries</li>
+              </ul>
+              <a
+                href="/chat"
+                className="mt-6 inline-block w-full text-center px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 transition"
+              >
+                Start free
+              </a>
+            </div>
+
+            {/* Starter */}
+            <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800">
+              <h3 className="text-lg font-semibold">Starter</h3>
+              <p className="text-3xl font-bold mt-2">£7<span className="text-sm text-slate-400">/mo</span></p>
+              <p className="text-slate-400 text-sm mt-1">Unlimited daily coaching</p>
+              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+                <li>Unlimited messages</li>
+                <li>Short term session memory</li>
+                <li>Save 1 active goal</li>
+                <li>No subjects</li>
+              </ul>
+              <a
+                href="/pricing"
+                className="mt-6 inline-block w-full text-center px-4 py-2 rounded-xl border border-slate-700 hover:border-emerald-400 hover:text-emerald-400 transition font-semibold"
+              >
+                View details
+              </a>
+            </div>
+
+            {/* Pro (Recommended) */}
+            <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.12)]">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Pro</h3>
+                <span className="text-xs font-semibold bg-emerald-500 text-slate-950 px-3 py-1 rounded-full">
+                  Recommended
+                </span>
+              </div>
+              <p className="text-3xl font-bold mt-2">£19<span className="text-sm text-slate-400">/mo</span></p>
+              <p className="text-slate-300 text-sm mt-1">Structured coaching that remembers you</p>
+              <ul className="mt-4 space-y-2 text-sm text-slate-200">
+                <li>Unlimited messages</li>
+                <li>Up to 5 subjects</li>
+                <li>Coach modes per subject</li>
+                <li>Persistent memory per subject</li>
+                <li>Weekly reflection summary</li>
+              </ul>
+              <a
+                href="/pricing"
+                className="mt-6 inline-block w-full text-center px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 transition"
+              >
+                Go Pro
+              </a>
+            </div>
+
+            {/* Elite */}
+            <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800">
+              <h3 className="text-lg font-semibold">Elite</h3>
+              <p className="text-3xl font-bold mt-2">£39<span className="text-sm text-slate-400">/mo</span></p>
+              <p className="text-slate-400 text-sm mt-1">Deep work and plans</p>
+              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+                <li>Unlimited subjects</li>
+                <li>Weekly growth plan</li>
+                <li>Guided journaling prompts</li>
+                <li>Priority model and features</li>
+              </ul>
+              <a
+                href="/pricing"
+                className="mt-6 inline-block w-full text-center px-4 py-2 rounded-xl border border-slate-700 hover:border-emerald-400 hover:text-emerald-400 transition font-semibold"
+              >
+                View details
+              </a>
+            </div>
+          </div>
+
+          <div className="text-center mt-10">
+            <a
+              href="/pricing"
+              className="inline-flex items-center justify-center px-6 py-3 rounded-xl border border-slate-700 hover:border-emerald-400 hover:text-emerald-400 transition font-semibold"
+            >
+              See full pricing
+            </a>
           </div>
         </div>
       </section>
@@ -146,10 +267,9 @@ export default function Home() {
               }
             ].map((value, idx) => (
               <div
-  key={idx}
-  className={`relative mc-fade-in-up mc-delay-${Math.min(idx, 9)}`}
->
-
+                key={idx}
+                className={`relative mc-fade-in-up mc-delay-${Math.min(idx, 9)}`}
+              >
                 {/* Timeline dot */}
                 <div className="absolute -left-3 top-2 w-3 h-3 rounded-full bg-emerald-400 shadow-lg shadow-emerald-500/30" />
 
@@ -165,16 +285,24 @@ export default function Home() {
             {/* CTA at end of values */}
             <div className="text-center mt-24">
               <p className="text-slate-400 mb-6 text-lg">
-                menscoach.ai carries the Better Masculine Man DNA into a private AI space 
+                menscoach.ai carries the Better Masculine Man DNA into a private AI space
                 where you can be honest, untangle your thoughts, and plan simple next steps.
               </p>
 
-              <a
-                href="/chat"
-                className="px-8 py-3 rounded-xl bg-emerald-500 text-slate-950 text-lg font-semibold hover:bg-emerald-400 transition"
-              >
-                Start Your Coaching Session
-              </a>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <a
+                  href="/chat"
+                  className="px-8 py-3 rounded-xl bg-emerald-500 text-slate-950 text-lg font-semibold hover:bg-emerald-400 transition"
+                >
+                  Start Your Coaching Session
+                </a>
+                <a
+                  href="/pricing"
+                  className="px-8 py-3 rounded-xl border border-slate-700 hover:border-emerald-400 hover:text-emerald-400 transition text-lg font-semibold"
+                >
+                  View pricing
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -184,6 +312,11 @@ export default function Home() {
       <footer className="border-t border-slate-800 bg-slate-950 py-6 text-center text-xs text-slate-500">
         <p>menscoach.ai is an AI coaching tool inspired by Better Masculine Man.</p>
         <p>Not a therapist. Not a crisis service. If you feel unsafe, contact local emergency support immediately.</p>
+        <p className="mt-2">
+          <a href="/pricing" className="hover:text-emerald-400 transition">Pricing</a>
+          <span className="mx-2 text-slate-700">|</span>
+          <a href="/chat" className="hover:text-emerald-400 transition">Chat</a>
+        </p>
       </footer>
     </main>
   );
