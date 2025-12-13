@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { listMessages } from "@/lib/subjects";
 import { getEntitlements, EntitlementError, Plan, Entitlements } from "@/lib/entitlements";
 import { getUserPlan } from "@/lib/users";
@@ -9,7 +9,7 @@ function cleanSessionId(value?: string | null) {
   return value ? value.replaceAll("/", "_") : null;
 }
 
-function readSessionFromCookie(req: Request): string | null {
+function readSessionFromCookie(req: NextRequest): string | null {
   const raw = req.headers.get("cookie");
   if (!raw) return null;
   const cookies = raw.split(";").map((c) => c.trim());
@@ -23,7 +23,7 @@ function readSessionFromCookie(req: Request): string | null {
   }
 }
 
-function resolveSessionId(req: Request): string | null {
+function resolveSessionId(req: NextRequest): string | null {
   const cookieId = readSessionFromCookie(req);
   if (cookieId) return cookieId;
   const headerId = cleanSessionId(req.headers.get("x-session-id"));
@@ -42,8 +42,8 @@ function errorResponse(
 }
 
 export async function GET(
-  req: Request,
-  context: { params: { id: string } }
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
@@ -66,7 +66,7 @@ export async function GET(
       );
     }
 
-    const subjectId = context.params?.id;
+    const { id: subjectId } = await params;
     if (!subjectId) {
       return errorResponse("INVALID_SUBJECT", "Subject id is required.", 400, plan);
     }
