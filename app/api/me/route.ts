@@ -5,6 +5,8 @@ import { getFirestore } from "@/lib/firebaseAdmin";
 import { getEntitlements } from "@/lib/entitlements";
 import { getDailyUsage } from "@/lib/usage";
 import { getOrCreateUser } from "@/lib/users";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
 
 // MUST match your session + checkout cookies.
 const COOKIE_NAME = "mc_session_id";
@@ -32,6 +34,9 @@ function coercePlan(value: any): Plan {
 export async function GET(req: NextRequest) {
   const db = getFirestore();
 
+  const session = await getServerSession(authOptions as any).catch(() => null);
+  const email = session?.user?.email ?? null;
+
   // 1) Identify user by cookie session id
   const cookieSessionId = readCookieSessionId(req);
 
@@ -53,6 +58,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     sessionId: effectiveSessionId,
+    email,
     plan,
     entitlements,
     usage,

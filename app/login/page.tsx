@@ -18,7 +18,7 @@ export default function LoginPage() {
 
         <div className="mt-8 space-y-4">
           <button
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            onClick={() => signIn("google", { callbackUrl: "/chat" })}
             className="w-full rounded-xl bg-emerald-500 px-5 py-3 font-semibold text-slate-950 hover:bg-emerald-400 transition"
           >
             Continue with Google
@@ -36,7 +36,7 @@ export default function LoginPage() {
             </label>
 
             <button
-              onClick={() => signIn("email", { email, callbackUrl: "/dashboard" })}
+              onClick={() => signIn("email", { email, callbackUrl: "/chat" })}
               className="mt-4 w-full rounded-xl border border-emerald-500/40 px-5 py-3 font-semibold text-emerald-200 hover:bg-emerald-500/10 transition"
             >
               Email me a sign-in link
