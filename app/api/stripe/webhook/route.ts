@@ -1,3 +1,4 @@
+// app/api/stripe/webhook/route.ts
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
@@ -25,6 +26,36 @@ function planFromPrice(priceId: string | null | undefined): Plan | null {
   if (!priceId) return null;
   const plan = PRICE_TO_PLAN[priceId];
   return plan ?? null;
+}
+
+/**
+ * Stripe "Response<T>" can be either:
+ * - an intersection type (T & { lastResponse: ... }) OR
+ * - a wrapper shape with "data: T" (depending on stripe-node version/types).
+ *
+ * Also, newer Stripe API versions expose billing period fields on the
+ * subscription *items* rather than on the subscription object.
+ *
+ * Returns ms epoch or null.
+ */
+function getCurrentPeriodEnd(
+  subscription: Stripe.Subscription | Stripe.Response<Stripe.Subscription>
+): number | null {
+  // Normalize potential wrapper
+  const sub: Stripe.Subscription =
+    (subscription as any)?.data ? (subscription as any).data : (subscription as any);
+
+  // Prefer item-level current_period_end (new Stripe behavior)
+  const ends: number[] =
+    sub.items?.data
+      ?.map((it: any) => it?.current_period_end)
+      .filter((v: any) => typeof v === "number") ?? [];
+
+  if (ends.length) return Math.max(...ends) * 1000;
+
+  // Fallback (older API versions still had subscription-level)
+  const raw = (sub as any)?.current_period_end;
+  return typeof raw === "number" ? raw * 1000 : null;
 }
 
 async function updateUserPlan(opts: {
@@ -89,12 +120,16 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
       expand: ["items.data.price"],
     });
-    status = subscription.status ?? null;
-    currentPeriodEnd = subscription.current_period_end
-      ? subscription.current_period_end * 1000
-      : null;
+
+    // Normalize potential wrapper
+    const sub: Stripe.Subscription =
+      (subscription as any)?.data ? (subscription as any).data : (subscription as any);
+
+    status = sub.status ?? null;
+    currentPeriodEnd = getCurrentPeriodEnd(subscription);
+
     if (!plan) {
-      plan = planFromPrice(subscription.items.data[0]?.price?.id) ?? plan;
+      plan = planFromPrice(sub.items.data[0]?.price?.id) ?? plan;
     }
   }
 
@@ -120,9 +155,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription, canc
   const priceId = subscription.items.data[0]?.price?.id;
   const plan = cancelled ? "free" : planFromPrice(priceId);
   const status = subscription.status ?? null;
-  const currentPeriodEnd = subscription.current_period_end
-    ? subscription.current_period_end * 1000
-    : null;
+  const currentPeriodEnd = getCurrentPeriodEnd(subscription);
   const customerId =
     typeof subscription.customer === "string"
       ? subscription.customer
