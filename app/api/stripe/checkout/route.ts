@@ -4,7 +4,7 @@ import { getOrCreateUser } from "@/lib/users";
 
 type PaidPlan = "starter" | "pro" | "elite";
 
-// IMPORTANT: this must match the cookie your /api/session uses
+// IMPORTANT: this must match the cookie your whole app uses
 const SESSION_COOKIE_NAME = "mc_session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
 
@@ -24,7 +24,7 @@ function readCookie(req: Request, name: string): string | null {
   }
 }
 
-function resolveSessionId(req: Request): { sessionId: string | null; shouldSetCookie: boolean } {
+function resolveSessionId(req: Request): { sessionId: string; shouldSetCookie: boolean } {
   const cookieId = readCookie(req, SESSION_COOKIE_NAME);
   if (cookieId) return { sessionId: cookieId, shouldSetCookie: false };
 
@@ -68,13 +68,8 @@ export async function POST(req: Request) {
     }
 
     const { sessionId, shouldSetCookie } = resolveSessionId(req);
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: { code: "SESSION_REQUIRED", message: "Session is required." } },
-        { status: 401 }
-      );
-    }
 
+    // Ensure user doc exists before checkout
     await getOrCreateUser(sessionId);
 
     const checkout = await stripe.checkout.sessions.create({
@@ -83,7 +78,12 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       success_url: `${siteUrl}/chat?upgraded=${plan}`,
       cancel_url: `${siteUrl}/pricing`,
+
+      // CRITICAL: webhook uses this to upgrade the right user
       metadata: { sessionId, plan },
+
+      // Optional, helpful for debugging in Stripe
+      client_reference_id: sessionId,
     });
 
     const res = NextResponse.json({ url: checkout.url }, { status: 200 });

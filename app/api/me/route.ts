@@ -2,95 +2,67 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getFirestore } from "@/lib/firebaseAdmin";
-import { getEntitlements, Plan } from "@/lib/entitlements";
+import { getEntitlements } from "@/lib/entitlements";
 import { getDailyUsage } from "@/lib/usage";
 import { getOrCreateUser } from "@/lib/users";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/auth";
 
-const COOKIE_NAME = "mc_session_id";
+// MUST match your checkout route cookie name.
+// If your checkout route uses "mc_session", keep this.
+// If you changed checkout route to "mc_session_id", change this too.
+const COOKIE_NAME = "mc_session";
+
+type Plan = "free" | "starter" | "pro" | "elite";
+
+function safeSessionId(sessionId: string) {
+  return sessionId.replaceAll("/", "_");
+}
 
 function utcDateKey(d = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
 function readCookieSessionId(req: NextRequest) {
-  return req.cookies.get(COOKIE_NAME)?.value ?? null;
+  const raw = req.cookies.get(COOKIE_NAME)?.value ?? null;
+  return raw ? safeSessionId(raw) : null;
 }
 
-async function findMcUserDocIdByEmail(db: FirebaseFirestore.Firestore, email: string) {
-  const qs = await db.collection("mc_users").where("email", "==", email).limit(1).get();
-  if (qs.empty) return null;
-  return qs.docs[0].id;
+function coercePlan(value: any): Plan {
+  if (value === "starter" || value === "pro" || value === "elite") return value;
+  return "free";
 }
 
 export async function GET(req: NextRequest) {
   const db = getFirestore();
 
-  // Prefer NextAuth session
-  const session = await getServerSession(authOptions).catch(() => null);
-  const emailFromAuth = session?.user?.email ?? null;
-
-  // With our auth.ts session callback, this should exist when authed
-  const authUserId = (session as any)?.user?.id ?? null;
-
-  // Resolve authenticated mc_users doc id
-  let mcUserDocId: string | null = null;
-
-  if (authUserId) {
-    mcUserDocId = authUserId;
-  } else if (emailFromAuth) {
-    mcUserDocId = await findMcUserDocIdByEmail(db, emailFromAuth);
-  }
-
-  // Cookie session id (anonymous)
+  // 1) Identify user by cookie session id
   const cookieSessionId = readCookieSessionId(req);
 
-  // Choose sessionId in this order:
-  // 1) authenticated user doc
-  // 2) cookie doc
-  // 3) fallback
-  const sessionId = mcUserDocId ?? cookieSessionId ?? "unknown-session";
+  // Fallback if cookie is missing (should be rare if you call /api/session on load)
+  const effectiveSessionId = cookieSessionId ?? safeSessionId(crypto.randomUUID());
 
-  // IMPORTANT FIX:
-  // Only create anonymous user records when we truly have a cookie session.
-  // Never create "unknown-session", and never create based on auth-linked identity.
-  if (!mcUserDocId && cookieSessionId) {
-    await getOrCreateUser(cookieSessionId);
-  }
+  // 2) Ensure user doc exists
+  await getOrCreateUser(effectiveSessionId);
 
-  const snap = await db.collection("mc_users").doc(sessionId).get();
+  // 3) Read user doc (doc id must match cookie identity)
+  const snap = await db.collection("mc_users").doc(effectiveSessionId).get();
   const user = snap.exists ? (snap.data() as any) : {};
 
-  const plan = (user?.plan ?? "free") as Plan;
+  const plan = coercePlan(user?.plan);
   const entitlements = getEntitlements(plan);
 
-  const dateKey = utcDateKey();
-  const count = await getDailyUsage(sessionId, dateKey);
+  // 4) Usage (daily)
+  const usage = await getDailyUsage(effectiveSessionId, utcDateKey());
 
-  return NextResponse.json(
-    {
-      sessionId,
-      plan,
-      entitlements,
-
-      email: emailFromAuth ?? user?.email ?? null,
-      provider: user?.provider ?? null,
-
-      usage: {
-        dateKey,
-        messageCount: count,
-        dailyLimit: entitlements.dailyMessageLimit,
-      },
-      profile: {
-        name: user?.name ?? "",
-        primaryFocus: user?.primaryFocus ?? "",
-        preferredMode: user?.preferredMode ?? "default",
-        goal30: user?.goal30 ?? "",
-        onboardingComplete: Boolean(user?.onboardingComplete),
-        onboardingSkipped: Boolean(user?.onboardingSkipped),
-      },
+  return NextResponse.json({
+    sessionId: effectiveSessionId,
+    plan,
+    entitlements,
+    usage,
+    stripe: {
+      customerId: user?.stripeCustomerId ?? null,
+      subscriptionId: user?.stripeSubscriptionId ?? null,
+      status: user?.stripeSubscriptionStatus ?? null,
+      currentPeriodEnd: user?.stripeCurrentPeriodEnd ?? null,
     },
-    { status: 200 }
-  );
+  });
 }
