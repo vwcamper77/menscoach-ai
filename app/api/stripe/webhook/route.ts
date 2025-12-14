@@ -53,7 +53,9 @@ async function updateUserPlan(opts: {
 }
 
 function getSessionIdFromMetadata(
-  obj: { metadata?: Record<string, any> } & { client_reference_id?: string | null }
+  obj: { metadata?: Record<string, any> | null | undefined } & {
+    client_reference_id?: string | null;
+  }
 ): string | null {
   const meta = obj.metadata ?? {};
   return (
