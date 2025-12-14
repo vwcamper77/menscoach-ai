@@ -12,6 +12,9 @@ import {
   linkEmailToSession,
   unlinkEmailSession,
 } from "@/lib/sessionLink";
+import { stripe } from "@/lib/stripe";
+
+export const runtime = "nodejs";
 
 // MUST match your session + checkout cookies.
 const COOKIE_NAME = "mc_session_id";
@@ -42,76 +45,36 @@ function isPaidDoc(doc: Record<string, any> | null | undefined) {
   return typeof plan === "string" && plan !== "free";
 }
 
-function pickMostRecentDoc(
-  a: { id: string; data: Record<string, any> },
-  b: { id: string; data: Record<string, any> }
-) {
-  const aUpdated = a.data?.updatedAt?.toDate?.() ?? a.data?.updatedAt ?? a.data?.createdAt?.toDate?.() ?? a.data?.createdAt ?? null;
-  const bUpdated = b.data?.updatedAt?.toDate?.() ?? b.data?.updatedAt ?? b.data?.createdAt?.toDate?.() ?? b.data?.createdAt ?? null;
-
-  const aTime = aUpdated instanceof Date ? aUpdated.getTime() : (typeof aUpdated === "number" ? aUpdated : 0);
-  const bTime = bUpdated instanceof Date ? bUpdated.getTime() : (typeof bUpdated === "number" ? bUpdated : 0);
-
-  return bTime > aTime ? b : a;
-}
-
-/**
- * When a user is authenticated, we should be able to recover the canonical
- * mc_users record even if the cookie or mc_user_links are out of sync.
- *
- * We look for documents by authEmail (preferred) and email (fallback),
- * then prefer paid docs, else most recently updated.
- */
-async function findBestMcUserSessionIdByEmail(
+async function findPaidSessionIdByStripeEmail(
   db: FirebaseFirestore.Firestore,
   email: string
 ): Promise<string | null> {
   const emailLower = email.toLowerCase().trim();
   if (!emailLower) return null;
 
-  const found: Array<{ id: string; data: Record<string, any> }> = [];
+  // Try Stripe customers by email. Prefer the most recently created one.
+  // customers.list supports { email } filter.
+  const customers = await stripe.customers.list({ email: emailLower, limit: 10 });
 
-  // Query 1: authEmail == email
-  try {
-    const qs1 = await db
+  if (!customers.data.length) return null;
+
+  // For each customer, see if we have a mc_users doc tied to stripeCustomerId
+  for (const c of customers.data) {
+    const qs = await db
       .collection("mc_users")
-      .where("authEmail", "==", emailLower)
-      .limit(20)
+      .where("stripeCustomerId", "==", c.id)
+      .limit(5)
       .get();
 
-    qs1.forEach((d) => found.push({ id: d.id, data: d.data() as Record<string, any> }));
-  } catch {
-    // ignore
+    if (qs.empty) continue;
+
+    // Prefer a paid doc among matches
+    const docs = qs.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, any> }));
+    const paid = docs.find((x) => isPaidDoc(x.data));
+    return (paid ?? docs[0]).id;
   }
 
-  // Query 2: email == email (in case you store it this way)
-  try {
-    const qs2 = await db
-      .collection("mc_users")
-      .where("email", "==", emailLower)
-      .limit(20)
-      .get();
-
-    qs2.forEach((d) => {
-      if (!found.some((x) => x.id === d.id)) {
-        found.push({ id: d.id, data: d.data() as Record<string, any> });
-      }
-    });
-  } catch {
-    // ignore
-  }
-
-  if (found.length === 0) return null;
-
-  // Prefer any paid doc
-  const paid = found.filter((x) => isPaidDoc(x.data));
-  if (paid.length > 0) {
-    // If multiple paid docs exist, take the most recently updated
-    return paid.reduce((acc, cur) => pickMostRecentDoc(acc, cur)).id;
-  }
-
-  // Otherwise, take most recent overall
-  return found.reduce((acc, cur) => pickMostRecentDoc(acc, cur)).id;
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -134,9 +97,8 @@ export async function GET(req: NextRequest) {
     cookieDocData = cookieSnap.exists ? (cookieSnap.data() as Record<string, any>) : null;
   }
 
-  // 1) If user is logged in, attempt to resolve their canonical session
+  // 1) Resolve via link table (your existing logic)
   if (email) {
-    // A) Try the existing link table first
     let linkedSessionId = await getLinkedSessionId(email);
 
     if (linkedSessionId) {
@@ -145,7 +107,6 @@ export async function GET(req: NextRequest) {
         const canonicalDoc = linkedSnap.data() as Record<string, any>;
 
         if (cookieSessionId && linkedSessionId !== cookieSessionId) {
-          // Prefer paid doc if there is a mismatch
           if (isPaidDoc(cookieDocData) && !isPaidDoc(canonicalDoc)) {
             finalSessionId = cookieSessionId;
           } else {
@@ -155,27 +116,22 @@ export async function GET(req: NextRequest) {
           finalSessionId = linkedSessionId;
         }
       } else {
-        // Stale link, remove it
         await unlinkEmailSession(email);
         linkedSessionId = null;
       }
     }
+  }
 
-    // B) Safety net: search mc_users by authEmail/email, prefer paid
-    // This fixes the exact situation you are in: paid doc exists, but link/cookie points elsewhere.
-    const bestByEmail = await findBestMcUserSessionIdByEmail(db, email);
-    if (bestByEmail) {
-      const bestSnap = await db.collection("mc_users").doc(bestByEmail).get();
-      const bestDoc = bestSnap.exists ? (bestSnap.data() as Record<string, any>) : null;
+  // 2) Stripe recovery (THIS is the missing piece)
+  // If we are logged in but we are still on a free doc, try to recover paid doc via Stripe customer email.
+  if (email) {
+    const currentSnap = await db.collection("mc_users").doc(finalSessionId).get();
+    const currentDoc = currentSnap.exists ? (currentSnap.data() as Record<string, any>) : null;
 
-      const currentSnap = await db.collection("mc_users").doc(finalSessionId).get();
-      const currentDoc = currentSnap.exists ? (currentSnap.data() as Record<string, any>) : null;
-
-      // Prefer paid, else prefer whatever is "bestByEmail"
-      if (isPaidDoc(bestDoc) && !isPaidDoc(currentDoc)) {
-        finalSessionId = bestByEmail;
-      } else if (!currentDoc) {
-        finalSessionId = bestByEmail;
+    if (!isPaidDoc(currentDoc)) {
+      const stripePaidSessionId = await findPaidSessionIdByStripeEmail(db, email);
+      if (stripePaidSessionId && stripePaidSessionId !== finalSessionId) {
+        finalSessionId = stripePaidSessionId;
       }
     }
   }
