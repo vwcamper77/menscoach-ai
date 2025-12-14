@@ -151,8 +151,8 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user }) {
-      // Hard block anyone not on the admin allowlist
-      return isAdminEmail(user?.email);
+      // Allow anyone to sign in; admin-only areas are guarded in the relevant routes/pages
+      return true;
     },
     async jwt({ token, user }) {
       // Keep email on token
