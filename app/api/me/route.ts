@@ -91,7 +91,8 @@ export async function GET(req: NextRequest) {
   await getOrCreateUser(finalSessionId);
 
   if (email) {
-    await linkEmailToSession(email, finalSessionId, session?.user?.id ?? null);
+    const authUserId = (session?.user as { id?: string })?.id ?? null;
+    await linkEmailToSession(email, finalSessionId, authUserId);
     await db.collection("mc_users").doc(finalSessionId).set(
       {
         authEmail: email,
