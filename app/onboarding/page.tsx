@@ -1,20 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { focusOptions, isPresetFocus } from "@/lib/focusOptions";
 import { getOrCreateSessionId } from "@/utils/sessionId";
 import { useVisualViewportOffset } from "@/utils/useVisualViewportOffset";
 
 type Mode = "default" | "direct" | "calm" | "presence";
-
-const focusOptions = [
-  "Discipline",
-  "Relationships",
-  "Purpose/work",
-  "Confidence",
-  "Stress",
-  "Health/body",
-];
 
 const modeOptions: { key: Mode; label: string; desc: string }[] = [
   { key: "direct", label: "Direct", desc: "Clear next actions and accountability." },
@@ -23,23 +14,23 @@ const modeOptions: { key: Mode; label: string; desc: string }[] = [
 ];
 
 export default function OnboardingPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   useVisualViewportOffset();
 
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [primaryFocus, setPrimaryFocus] = useState("");
+  const [useCustomFocus, setUseCustomFocus] = useState(false);
   const [preferredMode, setPreferredMode] = useState<Mode>("direct");
   const [goal30, setGoal30] = useState("");
 
   const canContinue = useMemo(() => {
     if (step === 1) return true;
-    if (step === 2) return Boolean(primaryFocus);
+    if (step === 2) return Boolean(primaryFocus) || useCustomFocus;
     if (step === 3) return Boolean(preferredMode);
     if (step === 4) return Boolean(goal30.trim());
     return false;
-  }, [step, primaryFocus, preferredMode, goal30]);
+  }, [step, primaryFocus, preferredMode, goal30, useCustomFocus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,8 +55,10 @@ export default function OnboardingPage() {
         }
 
         // Prefill if any
+        const existingFocus = data?.profile?.primaryFocus ?? "";
         setName(data?.profile?.name ?? "");
-        setPrimaryFocus(data?.profile?.primaryFocus ?? "");
+        setPrimaryFocus(existingFocus);
+        setUseCustomFocus(Boolean(existingFocus && !isPresetFocus(existingFocus)));
         setPreferredMode((data?.profile?.preferredMode ?? "direct") as Mode);
         setGoal30(data?.profile?.goal30 ?? "");
       } finally {
@@ -79,17 +72,19 @@ export default function OnboardingPage() {
   }, []);
 
   async function submit() {
+    const focusToSave = useCustomFocus ? "" : primaryFocus;
+
     const res = await fetch("/api/onboarding", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ name, primaryFocus, preferredMode, goal30 }),
+      body: JSON.stringify({ name, primaryFocus: focusToSave, preferredMode, goal30 }),
     });
 
     if (!res.ok) return;
 
     // Hard nav ensures we come back with the same cookie + server state
-    window.location.href = "/chat";
+    window.location.href = useCustomFocus ? "/dashboard?edit=focus" : "/chat";
   }
 
   if (loading) {
@@ -178,15 +173,21 @@ export default function OnboardingPage() {
           {step === 2 && (
             <div className="mt-7">
               <h2 className="text-lg font-semibold">What do you want to focus on first?</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Pick a preset or add your own to set it in the dashboard editor.
+              </p>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {focusOptions.map((opt) => (
                   <button
                     key={opt}
                     type="button"
-                    onClick={() => setPrimaryFocus(opt)}
+                    onClick={() => {
+                      setPrimaryFocus(opt);
+                      setUseCustomFocus(false);
+                    }}
                     className={[
                       "rounded-xl border px-4 py-3 text-left text-sm transition",
-                      primaryFocus === opt
+                      primaryFocus === opt && !useCustomFocus
                         ? "border-emerald-500 bg-emerald-500/10"
                         : "border-slate-800 bg-slate-950/30 hover:border-emerald-500/50",
                     ].join(" ")}
@@ -194,6 +195,24 @@ export default function OnboardingPage() {
                     {opt}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseCustomFocus(true);
+                    setPrimaryFocus("");
+                  }}
+                  className={[
+                    "rounded-xl border px-4 py-3 text-left text-sm transition",
+                    useCustomFocus
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-slate-800 bg-slate-950/30 hover:border-emerald-500/50",
+                  ].join(" ")}
+                >
+                  <div className="text-sm font-semibold">Add yours</div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    Finish onboarding and we will open the dashboard editor so you can name it.
+                  </div>
+                </button>
               </div>
             </div>
           )}

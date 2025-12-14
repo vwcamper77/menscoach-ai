@@ -1,13 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createSubject, listSubjects } from "@/lib/subjects";
-import {
-  EntitlementError,
-  getEntitlements,
-  Plan,
-  Entitlements,
-} from "@/lib/entitlements";
+import { getEntitlements, EntitlementError, Plan, Entitlements } from "@/lib/entitlements";
 import { getUserPlan } from "@/lib/users";
-import { Mode } from "@/lib/modes";
+import type { Mode } from "@/lib/modes";
 
 const SESSION_COOKIE_NAME = "mc_session_id";
 
@@ -15,12 +10,13 @@ function cleanSessionId(value?: string | null) {
   return value ? value.replaceAll("/", "_") : null;
 }
 
-function readSessionFromCookie(req: Request): string | null {
+function readSessionFromCookie(req: NextRequest): string | null {
   const raw = req.headers.get("cookie");
   if (!raw) return null;
   const cookies = raw.split(";").map((c) => c.trim());
   const target = cookies.find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`));
   if (!target) return null;
+
   const value = target.slice(SESSION_COOKIE_NAME.length + 1);
   try {
     return cleanSessionId(decodeURIComponent(value));
@@ -29,7 +25,7 @@ function readSessionFromCookie(req: Request): string | null {
   }
 }
 
-function resolveSessionId(req: Request): string | null {
+function resolveSessionId(req: NextRequest): string | null {
   const cookieId = readSessionFromCookie(req);
   if (cookieId) return cookieId;
 
@@ -49,9 +45,11 @@ function errorResponse(
   return NextResponse.json({ error: { code, message }, plan, entitlements }, { status });
 }
 
-export async function GET(req: Request) {
+// GET /api/subjects -> list subjects
+export async function GET(req: NextRequest) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
+
   try {
     const sessionId = resolveSessionId(req);
     if (!sessionId) {
@@ -64,9 +62,10 @@ export async function GET(req: Request) {
     if ((ent.maxSubjects ?? 0) <= 0) {
       return errorResponse(
         "UPGRADE_REQUIRED",
-        "Subjects are available on Pro plans.",
+        "Subjects are available on paid plans.",
         403,
-        plan
+        plan,
+        ent
       );
     }
 
@@ -79,13 +78,16 @@ export async function GET(req: Request) {
 
     const code = err?.code ?? "UNKNOWN";
     const message = err?.message ?? "Unexpected error";
-    return errorResponse(code, message, 500, plan, ent);
+    const status = code === "NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 500;
+    return errorResponse(code, message, status, plan, ent);
   }
 }
 
-export async function POST(req: Request) {
+// POST /api/subjects -> create a subject
+export async function POST(req: NextRequest) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
+
   try {
     const sessionId = resolveSessionId(req);
     if (!sessionId) {
@@ -98,47 +100,40 @@ export async function POST(req: Request) {
     if ((ent.maxSubjects ?? 0) <= 0) {
       return errorResponse(
         "UPGRADE_REQUIRED",
-        "Subjects are available on Pro plans.",
+        "Subjects are available on paid plans.",
         403,
         plan,
         ent
       );
     }
 
-    const body = await req.json();
-    const titleRaw = (body?.title as string | undefined)?.trim();
-    const mode = body?.mode as Mode | undefined;
+    const body = await req.json().catch(() => ({}));
 
-    if (!titleRaw || titleRaw.length < 2) {
+    const title = typeof body?.title === "string" ? body.title.trim() : "";
+    if (!title) {
       return errorResponse("INVALID_TITLE", "Title is required.", 400, plan, ent);
     }
 
-    const allowedModes: Mode[] = [
-      "grounding",
-      "discipline",
-      "relationships",
-      "business",
-      "purpose",
-    ];
-    if (!mode || !allowedModes.includes(mode)) {
+    // --- FIX: coerce string -> Mode ---
+    const modeRaw = body?.mode;
+    if (typeof modeRaw !== "string" || !modeRaw.trim()) {
       return errorResponse("INVALID_MODE", "Mode is required.", 400, plan, ent);
     }
 
-    const subject = await createSubject(
-      sessionId,
-      { title: titleRaw.slice(0, 80), mode },
-      plan
-    );
+    // Cast to Mode (compile-time). If you want strict runtime validation,
+    // export an isMode() guard from lib/modes.ts and use it here instead.
+    const mode = modeRaw as Mode;
 
-    return NextResponse.json({ subject, plan, entitlements: ent }, { status: 201 });
+    const subject = await createSubject(sessionId, { title, mode }, plan);
+    return NextResponse.json({ subject, plan, entitlements: ent });
   } catch (err: any) {
     if (err instanceof EntitlementError) {
-      const status = err.code === "LIMIT_REACHED" ? 429 : 403;
-      return errorResponse(err.code, err.message, status, plan, ent);
+      return errorResponse(err.code, err.message, 403, plan, ent);
     }
 
     const code = err?.code ?? "UNKNOWN";
     const message = err?.message ?? "Unexpected error";
-    return errorResponse(code, message, 500, plan, ent);
+    const status = code === "NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 500;
+    return errorResponse(code, message, status, plan, ent);
   }
 }

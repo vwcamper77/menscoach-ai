@@ -47,6 +47,7 @@ export async function GET(
 ) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
+
   try {
     const sessionId = resolveSessionId(req);
     if (!sessionId) {
@@ -59,7 +60,7 @@ export async function GET(
     if ((ent.maxSubjects ?? 0) <= 0) {
       return errorResponse(
         "UPGRADE_REQUIRED",
-        "Subjects are available on Pro plans.",
+        "Subjects are available on paid plans.",
         403,
         plan,
         ent
@@ -80,7 +81,7 @@ export async function GET(
 
     const code = err?.code ?? "UNKNOWN";
     const message = err?.message ?? "Unexpected error";
-    const status = code === "NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 404 : 500;
+    const status = code === "NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 500;
     return errorResponse(code, message, status, plan, ent);
   }
 }

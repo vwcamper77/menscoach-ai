@@ -22,30 +22,23 @@ function safeSessionId(sessionId: string) {
   return sessionId.replaceAll("/", "_");
 }
 
+function normalizeEmail(email: string | null | undefined) {
+  const e = (email ?? "").trim().toLowerCase();
+  return e ? e : null;
+}
+
 function planFromPrice(priceId: string | null | undefined): Plan | null {
   if (!priceId) return null;
   const plan = PRICE_TO_PLAN[priceId];
   return plan ?? null;
 }
 
-/**
- * Stripe "Response<T>" can be either:
- * - an intersection type (T & { lastResponse: ... }) OR
- * - a wrapper shape with "data: T" (depending on stripe-node version/types).
- *
- * Also, newer Stripe API versions expose billing period fields on the
- * subscription *items* rather than on the subscription object.
- *
- * Returns ms epoch or null.
- */
 function getCurrentPeriodEnd(
   subscription: Stripe.Subscription | Stripe.Response<Stripe.Subscription>
 ): number | null {
-  // Normalize potential wrapper
   const sub: Stripe.Subscription =
     (subscription as any)?.data ? (subscription as any).data : (subscription as any);
 
-  // Prefer item-level current_period_end (new Stripe behavior)
   const ends: number[] =
     sub.items?.data
       ?.map((it: any) => it?.current_period_end)
@@ -53,34 +46,36 @@ function getCurrentPeriodEnd(
 
   if (ends.length) return Math.max(...ends) * 1000;
 
-  // Fallback (older API versions still had subscription-level)
   const raw = (sub as any)?.current_period_end;
   return typeof raw === "number" ? raw * 1000 : null;
 }
 
-async function updateUserPlan(opts: {
-  sessionId: string;
-  plan?: Plan;
-  customerId?: string | null;
-  subscriptionId?: string | null;
-  status?: string | null;
-  currentPeriodEnd?: number | null;
-}) {
-  const { sessionId, plan, customerId, subscriptionId, status, currentPeriodEnd } = opts;
+async function patchMcUserByDocId(
+  docId: string,
+  patch: Record<string, any>
+) {
   const db = getFirestore();
-  const docId = safeSessionId(sessionId);
+  await db.collection("mc_users").doc(docId).set(
+    {
+      ...patch,
+      updatedAt: new Date(),
+    },
+    { merge: true }
+  );
+}
 
-  const patch: Record<string, any> = {
-    updatedAt: new Date(),
-  };
+async function linkEmailToSessionDoc(email: string, sessionIdRaw: string) {
+  const db = getFirestore();
+  const e = normalizeEmail(email);
+  if (!e) return;
 
-  if (plan) patch.plan = plan;
-  if (customerId !== undefined) patch.stripeCustomerId = customerId ?? null;
-  if (subscriptionId !== undefined) patch.stripeSubscriptionId = subscriptionId ?? null;
-  if (status !== undefined) patch.stripeSubscriptionStatus = status ?? null;
-  if (currentPeriodEnd !== undefined) patch.stripeCurrentPeriodEnd = currentPeriodEnd ?? null;
-
-  await db.collection("mc_users").doc(docId).set(patch, { merge: true });
+  await db.collection("mc_user_links").doc(e).set(
+    {
+      sessionId: safeSessionId(sessionIdRaw),
+      updatedAt: new Date(),
+    },
+    { merge: true }
+  );
 }
 
 function getSessionIdFromMetadata(
@@ -98,19 +93,53 @@ function getSessionIdFromMetadata(
   );
 }
 
+async function findMcUserDocIdByStripe(
+  subscriptionId?: string | null,
+  customerId?: string | null
+): Promise<string | null> {
+  const db = getFirestore();
+
+  if (subscriptionId) {
+    const qs = await db
+      .collection("mc_users")
+      .where("stripeSubscriptionId", "==", subscriptionId)
+      .limit(1)
+      .get();
+    if (!qs.empty) return qs.docs[0].id;
+  }
+
+  if (customerId) {
+    const qs = await db
+      .collection("mc_users")
+      .where("stripeCustomerId", "==", customerId)
+      .limit(1)
+      .get();
+    if (!qs.empty) return qs.docs[0].id;
+  }
+
+  return null;
+}
+
 async function handleCheckoutSession(session: Stripe.Checkout.Session) {
-  const sessionId = getSessionIdFromMetadata(session);
-  if (!sessionId) {
+  const sessionIdRaw = getSessionIdFromMetadata(session);
+  if (!sessionIdRaw) {
     console.error("Stripe webhook: missing sessionId on checkout.session.completed");
     return;
   }
 
+  const docId = safeSessionId(sessionIdRaw);
+
   const customerId =
     typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+
   const subscriptionId =
     typeof session.subscription === "string"
       ? session.subscription
       : session.subscription?.id ?? null;
+
+  const buyerEmail = normalizeEmail(
+    session.customer_details?.email ?? session.customer_email ?? null
+  );
 
   let plan = (session.metadata?.plan as Plan) ?? null;
   let status: string | null = null;
@@ -121,7 +150,6 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
       expand: ["items.data.price"],
     });
 
-    // Normalize potential wrapper
     const sub: Stripe.Subscription =
       (subscription as any)?.data ? (subscription as any).data : (subscription as any);
 
@@ -133,41 +161,63 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
     }
   }
 
-  if (plan) {
-    await updateUserPlan({
-      sessionId,
-      plan,
-      customerId,
-      subscriptionId,
-      status,
-      currentPeriodEnd,
-    });
+  if (!plan) {
+    console.error("Stripe webhook: could not resolve plan for checkout.session.completed");
+    return;
+  }
+
+  // Write plan + stripe ids + email onto the upgraded mc_users doc
+  await patchMcUserByDocId(docId, {
+    plan,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId,
+    stripeSubscriptionStatus: status,
+    stripeCurrentPeriodEnd: currentPeriodEnd,
+    authEmail: buyerEmail,
+    email: buyerEmail, // helpful for searching and admin views
+  });
+
+  // Hard link email -> this session so /api/me resolves correctly
+  if (buyerEmail) {
+    await linkEmailToSessionDoc(buyerEmail, sessionIdRaw);
   }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription, cancelled = false) {
-  const sessionId = getSessionIdFromMetadata(subscription);
-  if (!sessionId) {
-    console.error("Stripe webhook: missing sessionId on subscription event");
-    return;
-  }
-
   const priceId = subscription.items.data[0]?.price?.id;
   const plan = cancelled ? "free" : planFromPrice(priceId);
   const status = subscription.status ?? null;
   const currentPeriodEnd = getCurrentPeriodEnd(subscription);
+
   const customerId =
     typeof subscription.customer === "string"
       ? subscription.customer
       : subscription.customer?.id ?? null;
 
-  await updateUserPlan({
-    sessionId,
+  // IMPORTANT:
+  // subscription events do not reliably include checkout metadata.
+  // Find the correct mc_users doc by stripe ids instead.
+  const docId =
+    safeSessionId(getSessionIdFromMetadata(subscription) ?? "") ||
+    (await findMcUserDocIdByStripe(subscription.id, customerId));
+
+  const resolvedDocId =
+    docId && docId !== safeSessionId("") ? docId : await findMcUserDocIdByStripe(subscription.id, customerId);
+
+  if (!resolvedDocId) {
+    console.error("Stripe webhook: could not resolve mc_users doc for subscription event", {
+      subscriptionId: subscription.id,
+      customerId,
+    });
+    return;
+  }
+
+  await patchMcUserByDocId(resolvedDocId, {
     plan: plan ?? undefined,
-    customerId,
-    subscriptionId: subscription.id,
-    status,
-    currentPeriodEnd,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    stripeSubscriptionStatus: status,
+    stripeCurrentPeriodEnd: currentPeriodEnd,
   });
 }
 

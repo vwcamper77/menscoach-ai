@@ -5,16 +5,6 @@ import GoogleProvider from "next-auth/providers/google";
 import { Resend } from "resend";
 import { getFirestore } from "@/lib/firebaseAdmin";
 
-function isAdminEmail(email: string | null | undefined) {
-  if (!email) return false;
-  const raw = process.env.ADMIN_EMAILS ?? "";
-  const allow = raw
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return allow.includes(email.toLowerCase());
-}
-
 function firstNameFromEmail(email: string | null | undefined) {
   if (!email) return "there";
   const local = email.split("@")[0] ?? "";
@@ -116,9 +106,8 @@ export const authOptions: NextAuthOptions = {
           process.env.NEXT_PUBLIC_SITE_URL ??
           process.env.NEXTAUTH_URL ??
           "http://localhost:3000";
-        const trimmedSiteUrl = siteUrl.endsWith("/")
-          ? siteUrl.slice(0, -1)
-          : siteUrl;
+        const trimmedSiteUrl = siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl;
+
         const unsubscribeUrl =
           process.env.MC_UNSUBSCRIBE_URL ?? `${trimmedSiteUrl}/unsubscribe`;
 
@@ -135,9 +124,7 @@ export const authOptions: NextAuthOptions = {
           subject,
           html,
           text,
-          headers: unsubscribeUrl
-            ? { "List-Unsubscribe": `<${unsubscribeUrl}>` }
-            : undefined,
+          headers: unsubscribeUrl ? { "List-Unsubscribe": `<${unsubscribeUrl}>` } : undefined,
         });
 
         if (error) {
@@ -146,29 +133,41 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  session: {
-    strategy: "jwt",
-  },
+
+  session: { strategy: "jwt" },
+
   callbacks: {
-    async signIn({ user }) {
-      // Allow anyone to sign in; admin-only areas are guarded in the relevant routes/pages
+    async signIn() {
       return true;
     },
-    async jwt({ token, user }) {
-      // Keep email on token
+
+    async jwt({ token, user, account }) {
       if (user?.email) token.email = user.email;
-      if (user?.id) (token as any).id = user.id;
+
+      // stable id (works for both User and AdapterUser)
+      if ((user as any)?.id) (token as any).id = (user as any).id;
+
+      // provider only available on sign-in
+      if (account?.provider) (token as any).provider = account.provider;
+
       return token;
     },
+
     async session({ session, token }) {
       if (session.user && token?.email) {
         session.user.email = String(token.email);
       }
+
+      // id
       if (session.user && (token as any)?.sub) {
         (session.user as any).id = String((token as any).sub);
       } else if (session.user && (token as any)?.id) {
         (session.user as any).id = String((token as any).id);
       }
+
+      // provider
+      (session.user as any).provider = (token as any).provider ?? null;
+
       return session;
     },
   },

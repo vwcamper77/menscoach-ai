@@ -10,7 +10,7 @@ export default function AboutPage() {
       <section className="relative flex-1 px-6 py-20 overflow-hidden">
         {/* Subtle background glow */}
         <div className="absolute inset-0 bg-linear-to-br from-emerald-500/10 via-slate-900 to-slate-950" />
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 w-130 h-130 rounded-full bg-emerald-500/10 blur-3xl" />
 
         <div className="relative mx-auto w-full max-w-3xl space-y-10">
           {/* Header */}

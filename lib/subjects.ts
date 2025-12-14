@@ -1,11 +1,6 @@
 import { getFirestore } from "./firebaseAdmin";
 import { Mode } from "./modes";
-import {
-  EntitlementError,
-  assertEntitlement,
-  getEntitlements,
-  Plan,
-} from "./entitlements";
+import { EntitlementError, assertEntitlement, getEntitlements, Plan } from "./entitlements";
 import { getUserPlan } from "./users";
 
 const SUBJECTS_COLLECTION = "mc_subjects";
@@ -52,22 +47,16 @@ export async function createSubject(
   const userPlan = plan ?? (await getUserPlan(sessionId));
   const ent = getEntitlements(userPlan);
 
-  assertEntitlement(
-    (ent.maxSubjects ?? 0) > 0,
-    "UPGRADE_REQUIRED",
-    "Subjects are available on Pro."
-  );
+  assertEntitlement((ent.maxSubjects ?? 0) > 0, "UPGRADE_REQUIRED", "Subjects are available on paid plans.");
 
   const currentCount = await countSubjects(sessionId);
   if (ent.maxSubjects !== null && currentCount >= ent.maxSubjects) {
-    throw new EntitlementError(
-      "LIMIT_REACHED",
-      "Subject limit reached for this plan."
-    );
+    throw new EntitlementError("LIMIT_REACHED", "Subject limit reached for this plan.");
   }
 
   const doc = db.collection(SUBJECTS_COLLECTION).doc();
   const now = Date.now();
+
   const record: Omit<SubjectRecord, "id"> = {
     title: input.title,
     mode: input.mode,
@@ -91,10 +80,7 @@ export async function listSubjects(sessionId: string): Promise<SubjectRecord[]> 
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as SubjectRecord[];
 }
 
-export async function getSubject(
-  sessionId: string,
-  subjectId: string
-): Promise<SubjectRecord> {
+export async function getSubject(sessionId: string, subjectId: string): Promise<SubjectRecord> {
   const db = getFirestore();
   const ref = db.collection(SUBJECTS_COLLECTION).doc(safeId(subjectId));
   const snap = await ref.get();
@@ -121,6 +107,7 @@ export async function addMessage(
 ): Promise<void> {
   const db = getFirestore();
   const now = message.createdAt ?? Date.now();
+
   const record: SubjectMessage = {
     role: message.role,
     content: message.content,
@@ -142,6 +129,7 @@ export async function listMessages(
   limit = 50
 ): Promise<SubjectMessage[]> {
   await getSubject(sessionId, subjectId); // ownership check
+
   const db = getFirestore();
   const snap = await db
     .collection(SUBJECTS_COLLECTION)
