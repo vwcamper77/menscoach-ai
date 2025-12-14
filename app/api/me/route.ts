@@ -42,11 +42,84 @@ function isPaidDoc(doc: Record<string, any> | null | undefined) {
   return typeof plan === "string" && plan !== "free";
 }
 
+function pickMostRecentDoc(
+  a: { id: string; data: Record<string, any> },
+  b: { id: string; data: Record<string, any> }
+) {
+  const aUpdated = a.data?.updatedAt?.toDate?.() ?? a.data?.updatedAt ?? a.data?.createdAt?.toDate?.() ?? a.data?.createdAt ?? null;
+  const bUpdated = b.data?.updatedAt?.toDate?.() ?? b.data?.updatedAt ?? b.data?.createdAt?.toDate?.() ?? b.data?.createdAt ?? null;
+
+  const aTime = aUpdated instanceof Date ? aUpdated.getTime() : (typeof aUpdated === "number" ? aUpdated : 0);
+  const bTime = bUpdated instanceof Date ? bUpdated.getTime() : (typeof bUpdated === "number" ? bUpdated : 0);
+
+  return bTime > aTime ? b : a;
+}
+
+/**
+ * When a user is authenticated, we should be able to recover the canonical
+ * mc_users record even if the cookie or mc_user_links are out of sync.
+ *
+ * We look for documents by authEmail (preferred) and email (fallback),
+ * then prefer paid docs, else most recently updated.
+ */
+async function findBestMcUserSessionIdByEmail(
+  db: FirebaseFirestore.Firestore,
+  email: string
+): Promise<string | null> {
+  const emailLower = email.toLowerCase().trim();
+  if (!emailLower) return null;
+
+  const found: Array<{ id: string; data: Record<string, any> }> = [];
+
+  // Query 1: authEmail == email
+  try {
+    const qs1 = await db
+      .collection("mc_users")
+      .where("authEmail", "==", emailLower)
+      .limit(20)
+      .get();
+
+    qs1.forEach((d) => found.push({ id: d.id, data: d.data() as Record<string, any> }));
+  } catch {
+    // ignore
+  }
+
+  // Query 2: email == email (in case you store it this way)
+  try {
+    const qs2 = await db
+      .collection("mc_users")
+      .where("email", "==", emailLower)
+      .limit(20)
+      .get();
+
+    qs2.forEach((d) => {
+      if (!found.some((x) => x.id === d.id)) {
+        found.push({ id: d.id, data: d.data() as Record<string, any> });
+      }
+    });
+  } catch {
+    // ignore
+  }
+
+  if (found.length === 0) return null;
+
+  // Prefer any paid doc
+  const paid = found.filter((x) => isPaidDoc(x.data));
+  if (paid.length > 0) {
+    // If multiple paid docs exist, take the most recently updated
+    return paid.reduce((acc, cur) => pickMostRecentDoc(acc, cur)).id;
+  }
+
+  // Otherwise, take most recent overall
+  return found.reduce((acc, cur) => pickMostRecentDoc(acc, cur)).id;
+}
+
 export async function GET(req: NextRequest) {
   const db = getFirestore();
 
   const session = (await getServerSession(authOptions)) as Session | null;
-  const email = session?.user?.email ?? null;
+  const emailRaw = session?.user?.email ?? null;
+  const email = emailRaw ? String(emailRaw).toLowerCase().trim() : null;
 
   const cookieSessionId = readCookieSessionId(req);
   const fallbackSessionId = safeSessionId(crypto.randomUUID());
@@ -61,13 +134,18 @@ export async function GET(req: NextRequest) {
     cookieDocData = cookieSnap.exists ? (cookieSnap.data() as Record<string, any>) : null;
   }
 
+  // 1) If user is logged in, attempt to resolve their canonical session
   if (email) {
+    // A) Try the existing link table first
     let linkedSessionId = await getLinkedSessionId(email);
+
     if (linkedSessionId) {
       const linkedSnap = await db.collection("mc_users").doc(linkedSessionId).get();
       if (linkedSnap.exists) {
         const canonicalDoc = linkedSnap.data() as Record<string, any>;
+
         if (cookieSessionId && linkedSessionId !== cookieSessionId) {
+          // Prefer paid doc if there is a mismatch
           if (isPaidDoc(cookieDocData) && !isPaidDoc(canonicalDoc)) {
             finalSessionId = cookieSessionId;
           } else {
@@ -77,9 +155,27 @@ export async function GET(req: NextRequest) {
           finalSessionId = linkedSessionId;
         }
       } else {
+        // Stale link, remove it
         await unlinkEmailSession(email);
         linkedSessionId = null;
-        finalSessionId = cookieCandidate;
+      }
+    }
+
+    // B) Safety net: search mc_users by authEmail/email, prefer paid
+    // This fixes the exact situation you are in: paid doc exists, but link/cookie points elsewhere.
+    const bestByEmail = await findBestMcUserSessionIdByEmail(db, email);
+    if (bestByEmail) {
+      const bestSnap = await db.collection("mc_users").doc(bestByEmail).get();
+      const bestDoc = bestSnap.exists ? (bestSnap.data() as Record<string, any>) : null;
+
+      const currentSnap = await db.collection("mc_users").doc(finalSessionId).get();
+      const currentDoc = currentSnap.exists ? (currentSnap.data() as Record<string, any>) : null;
+
+      // Prefer paid, else prefer whatever is "bestByEmail"
+      if (isPaidDoc(bestDoc) && !isPaidDoc(currentDoc)) {
+        finalSessionId = bestByEmail;
+      } else if (!currentDoc) {
+        finalSessionId = bestByEmail;
       }
     }
   }
@@ -88,15 +184,19 @@ export async function GET(req: NextRequest) {
     shouldSetCookie = true;
   }
 
+  // Ensure user doc exists
   await getOrCreateUser(finalSessionId);
 
+  // Attach auth info and link email -> finalSessionId
   if (email) {
-    const authUserId = (session?.user as { id?: string })?.id ?? null;
+    const authUserId = (session?.user as any)?.id ?? null;
+
     await linkEmailToSession(email, finalSessionId, authUserId);
+
     await db.collection("mc_users").doc(finalSessionId).set(
       {
         authEmail: email,
-        authUserId: session?.user?.id ?? null,
+        authUserId: authUserId,
         updatedAt: new Date(),
       },
       { merge: true }
