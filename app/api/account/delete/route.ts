@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { getFirestore } from "@/lib/firebaseAdmin";
+import { unlinkEmailSession } from "@/lib/sessionLink";
 
 const COOKIE_NAME = "mc_session_id";
 
@@ -41,6 +42,8 @@ export async function POST(req: Request) {
     await deleteWhere(db, "sessions", "userId", userId).catch(() => null);
     await db.collection("users").doc(userId).delete().catch(() => null);
   }
+
+  await unlinkEmailSession(email);
 
   // Also clear anonymous cookie session so /api/me doesn't recreate anything tied to the old browser session
   const res = NextResponse.json({ ok: true });

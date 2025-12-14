@@ -1,11 +1,14 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import TopNav from "@/components/TopNav";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/chat";
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -18,7 +21,7 @@ export default function LoginPage() {
 
         <div className="mt-8 space-y-4">
           <button
-            onClick={() => signIn("google", { callbackUrl: "/chat" })}
+            onClick={() => signIn("google", { callbackUrl })}
             className="w-full rounded-xl bg-emerald-500 px-5 py-3 font-semibold text-slate-950 hover:bg-emerald-400 transition"
           >
             Continue with Google
@@ -36,7 +39,7 @@ export default function LoginPage() {
             </label>
 
             <button
-              onClick={() => signIn("email", { email, callbackUrl: "/chat" })}
+              onClick={() => signIn("email", { email, callbackUrl })}
               className="mt-4 w-full rounded-xl border border-emerald-500/40 px-5 py-3 font-semibold text-emerald-200 hover:bg-emerald-500/10 transition"
             >
               Email me a sign-in link

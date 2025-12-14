@@ -7,9 +7,15 @@ import { getDailyUsage } from "@/lib/usage";
 import { getOrCreateUser } from "@/lib/users";
 import { getServerSession, type Session } from "next-auth";
 import { authOptions } from "@/auth";
+import {
+  getLinkedSessionId,
+  linkEmailToSession,
+  unlinkEmailSession,
+} from "@/lib/sessionLink";
 
 // MUST match your session + checkout cookies.
 const COOKIE_NAME = "mc_session_id";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 90;
 
 type Plan = "free" | "starter" | "pro" | "elite";
 
@@ -31,33 +37,80 @@ function coercePlan(value: any): Plan {
   return "free";
 }
 
+function isPaidDoc(doc: Record<string, any> | null | undefined) {
+  const plan = doc?.plan;
+  return typeof plan === "string" && plan !== "free";
+}
+
 export async function GET(req: NextRequest) {
   const db = getFirestore();
 
   const session = (await getServerSession(authOptions)) as Session | null;
   const email = session?.user?.email ?? null;
 
-  // 1) Identify user by cookie session id
   const cookieSessionId = readCookieSessionId(req);
+  const fallbackSessionId = safeSessionId(crypto.randomUUID());
+  const cookieCandidate = cookieSessionId ?? fallbackSessionId;
 
-  // Fallback if cookie is missing (should be rare if you call /api/session on load)
-  const effectiveSessionId = cookieSessionId ?? safeSessionId(crypto.randomUUID());
+  let finalSessionId = cookieCandidate;
+  let shouldSetCookie = !cookieSessionId;
 
-  // 2) Ensure user doc exists
-  await getOrCreateUser(effectiveSessionId);
+  let cookieDocData: Record<string, any> | null = null;
+  if (cookieSessionId) {
+    const cookieSnap = await db.collection("mc_users").doc(cookieSessionId).get();
+    cookieDocData = cookieSnap.exists ? (cookieSnap.data() as Record<string, any>) : null;
+  }
 
-  // 3) Read user doc (doc id must match cookie identity)
-  const snap = await db.collection("mc_users").doc(effectiveSessionId).get();
+  if (email) {
+    let linkedSessionId = await getLinkedSessionId(email);
+    if (linkedSessionId) {
+      const linkedSnap = await db.collection("mc_users").doc(linkedSessionId).get();
+      if (linkedSnap.exists) {
+        const canonicalDoc = linkedSnap.data() as Record<string, any>;
+        if (cookieSessionId && linkedSessionId !== cookieSessionId) {
+          if (isPaidDoc(cookieDocData) && !isPaidDoc(canonicalDoc)) {
+            finalSessionId = cookieSessionId;
+          } else {
+            finalSessionId = linkedSessionId;
+          }
+        } else {
+          finalSessionId = linkedSessionId;
+        }
+      } else {
+        await unlinkEmailSession(email);
+        linkedSessionId = null;
+        finalSessionId = cookieCandidate;
+      }
+    }
+  }
+
+  if (cookieSessionId && finalSessionId !== cookieSessionId) {
+    shouldSetCookie = true;
+  }
+
+  await getOrCreateUser(finalSessionId);
+
+  if (email) {
+    await linkEmailToSession(email, finalSessionId, session?.user?.id ?? null);
+    await db.collection("mc_users").doc(finalSessionId).set(
+      {
+        authEmail: email,
+        authUserId: session?.user?.id ?? null,
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
+  }
+
+  const snap = await db.collection("mc_users").doc(finalSessionId).get();
   const user = snap.exists ? (snap.data() as any) : {};
 
   const plan = coercePlan(user?.plan);
   const entitlements = getEntitlements(plan);
+  const usage = await getDailyUsage(finalSessionId, utcDateKey());
 
-  // 4) Usage (daily)
-  const usage = await getDailyUsage(effectiveSessionId, utcDateKey());
-
-  return NextResponse.json({
-    sessionId: effectiveSessionId,
+  const res = NextResponse.json({
+    sessionId: finalSessionId,
     email,
     plan,
     entitlements,
@@ -77,4 +130,16 @@ export async function GET(req: NextRequest) {
       currentPeriodEnd: user?.stripeCurrentPeriodEnd ?? null,
     },
   });
+
+  if (shouldSetCookie) {
+    res.cookies.set(COOKIE_NAME, finalSessionId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: COOKIE_MAX_AGE,
+      path: "/",
+    });
+  }
+
+  return res;
 }
