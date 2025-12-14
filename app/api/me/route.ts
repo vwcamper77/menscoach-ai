@@ -56,6 +56,14 @@ export async function GET(req: NextRequest) {
     plan,
     entitlements,
     usage,
+    profile: {
+      onboardingComplete: Boolean(user?.onboardingComplete),
+      onboardingSkipped: Boolean(user?.onboardingSkipped),
+      name: user?.name ?? "",
+      primaryFocus: user?.primaryFocus ?? "",
+      preferredMode: user?.preferredMode ?? "direct",
+      goal30: user?.goal30 ?? "",
+    },
     stripe: {
       customerId: user?.stripeCustomerId ?? null,
       subscriptionId: user?.stripeSubscriptionId ?? null,
