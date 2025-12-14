@@ -6,6 +6,11 @@ import TopNav from "@/components/TopNav";
 
 type Me = {
   plan?: string;
+
+  // NEW
+  email?: string | null;
+  provider?: string | null;
+
   profile?: {
     name?: string;
     primaryFocus?: string;
@@ -20,6 +25,10 @@ export default function DashboardPage() {
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+
+  // NEW
+  const [deleting, setDeleting] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
 
   const [nameInput, setNameInput] = useState("");
   const [focusInput, setFocusInput] = useState("");
@@ -45,6 +54,10 @@ export default function DashboardPage() {
   const goal = me?.profile?.goal30;
   const plan = me?.plan ?? "free";
   const preferredMode = me?.profile?.preferredMode;
+
+  // NEW
+  const email = me?.email ?? null;
+  const provider = me?.provider ?? null;
 
   async function saveProfile() {
     setSaving(true);
@@ -80,6 +93,36 @@ export default function DashboardPage() {
       setSavedMessage("Could not save. Check your connection and try again.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // NEW
+  async function deleteAllData() {
+    const ok = window.confirm(
+      "Delete all your data? This cannot be undone."
+    );
+    if (!ok) return;
+
+    setDeleting(true);
+    setDeleteMessage(null);
+
+    try {
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        setDeleteMessage("Could not delete data. Try again.");
+        return;
+      }
+
+      // Sign out after deletion
+      window.location.href = "/api/auth/signout";
+    } catch {
+      setDeleteMessage("Could not delete data. Check your connection and try again.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -135,44 +178,62 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
-        {/* Focus */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-          <p className="text-xs uppercase tracking-widest text-slate-400">
-            Current focus
-          </p>
-          <h2 className="mt-3 text-2xl font-semibold text-emerald-400">
-            {focus}
-          </h2>
-          <p className="mt-3 text-sm text-slate-300">
-            This is where your attention is being trained.
-          </p>
-        </div>
+          {/* Focus */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+            <p className="text-xs uppercase tracking-widest text-slate-400">
+              Current focus
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-emerald-400">
+              {focus}
+            </h2>
+            <p className="mt-3 text-sm text-slate-300">
+              This is where your attention is being trained.
+            </p>
+          </div>
 
-        {/* 30 day goal */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-          <p className="text-xs uppercase tracking-widest text-slate-400">
-            30 day target
-          </p>
-          <p className="mt-3 text-sm text-slate-200 leading-relaxed">
-            {goal || "No goal set yet. Clarify this in chat."}
-          </p>
-        </div>
+          {/* 30 day goal */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+            <p className="text-xs uppercase tracking-widest text-slate-400">
+              30 day target
+            </p>
+            <p className="mt-3 text-sm text-slate-200 leading-relaxed">
+              {goal || "No goal set yet. Clarify this in chat."}
+            </p>
+          </div>
 
-        {/* Status */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-          <p className="text-xs uppercase tracking-widest text-slate-400">
-            Status
-          </p>
-          <p className="mt-3 text-sm text-slate-300">
-            Plan:{" "}
-            <span className="font-semibold uppercase text-white">
-              {plan}
-            </span>
-          </p>
-          <p className="mt-2 text-xs text-slate-400">
-            menscoach.ai remembers what matters when you upgrade.
-          </p>
-        </div>
+          {/* Status */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+            <p className="text-xs uppercase tracking-widest text-slate-400">
+              Status
+            </p>
+
+            <p className="mt-3 text-sm text-slate-300">
+              Plan:{" "}
+              <span className="font-semibold uppercase text-white">
+                {plan}
+              </span>
+            </p>
+
+            {/* NEW */}
+            <div className="mt-3 space-y-1">
+              <p className="text-xs text-slate-400">
+                Email:{" "}
+                <span className="text-slate-200">
+                  {email ? email : loading ? "Loading..." : "Not available"}
+                </span>
+              </p>
+              <p className="text-xs text-slate-400">
+                Signed in with:{" "}
+                <span className="text-slate-200">
+                  {provider ? provider : loading ? "Loading..." : "Not available"}
+                </span>
+              </p>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-400">
+              menscoach.ai remembers what matters when you upgrade.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -249,6 +310,38 @@ export default function DashboardPage() {
           </div>
         </section>
       ) : null}
+
+      {/* NEW: Privacy */}
+      <section className="mx-auto max-w-4xl px-6 pb-10">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-6">
+          <p className="text-xs uppercase tracking-widest text-slate-400">
+            Privacy
+          </p>
+
+          <p className="mt-2 text-sm text-slate-300">
+            You can delete your account data at any time.
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={deleteAllData}
+              disabled={deleting || loading}
+              className="rounded-xl border border-red-500/40 px-5 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10 disabled:opacity-60 transition"
+            >
+              {deleting ? "Deleting..." : "Delete all my data"}
+            </button>
+
+            {deleteMessage ? (
+              <span className="text-xs text-red-200">{deleteMessage}</span>
+            ) : null}
+          </div>
+
+          <p className="mt-3 text-xs text-slate-500">
+            This action cannot be undone.
+          </p>
+        </div>
+      </section>
 
       {/* QUIET CTA */}
       <section className="mx-auto max-w-4xl px-6 pb-16">

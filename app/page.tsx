@@ -20,18 +20,33 @@ export default function Home() {
         {/* Content */}
         <div className="relative z-10 max-w-3xl mx-auto space-y-6 mt-10">
           <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">
-            Built on Better Masculine Man
+            Built on proven principles of clarity, discipline, and responsibility
           </p>
 
           <h1 className="text-4xl sm:text-6xl font-bold leading-tight">
             A Private AI Coach
             <br />
-            <span className="text-emerald-400">For Modern Men</span>
+            <span className="text-emerald-400">For Men Who Want Clarity and Momentum</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-300 max-w-2xl mx-auto">
-            menscoach.ai is a spin off from Better Masculine Man.
-            It carries the same core values and turns them into a private, on demand coaching conversation for men who want more clarity, discipline, and direction.
+            menscoach.ai is a private, on-demand thinking partner built for men who
+            carry responsibility and prefer to work things out quietly. It is inspired
+            by the principles behind{" "}
+            <a
+              href="https://bettermasculineman.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-emerald-400 hover:underline"
+            >
+              Better Masculine Man
+            </a>
+            .
+          </p>
+
+          <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto">
+            No performative self-help. No public vulnerability. Just structured
+            reflection, grounded challenge, and clear next steps when you need them.
           </p>
 
           <div className="flex justify-center gap-4 pt-4">
@@ -45,21 +60,25 @@ export default function Home() {
               href="#values"
               className="px-6 py-3 rounded-xl border border-slate-600 hover:border-emerald-400 hover:text-emerald-400 transition"
             >
-              Explore The Values
+              Explore the Values
             </a>
           </div>
+
+          <p className="text-xs text-slate-400 pt-2">
+            Conversations are encrypted in storage and are not readable in the database.
+          </p>
 
           <div className="pt-2">
             <a
               href="/pricing"
               className="inline-flex items-center justify-center text-sm text-slate-300 hover:text-emerald-400 transition"
             >
-              View pricing
+              View Pricing
             </a>
           </div>
 
           <p className="text-xs text-slate-500 pt-2">
-            Not therapy or clinical advice. Coaching style conversation only.
+            Not therapy or clinical advice. Coaching-style conversation only.
           </p>
         </div>
       </section>
@@ -68,7 +87,7 @@ export default function Home() {
       <section className="relative py-16 px-6 bg-slate-900 border-t border-slate-800">
         <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl sm:text-3xl font-semibold text-center mb-10">
-            Men use Better Masculine Man principles to level up their lives
+            Men use these principles to think clearly and act deliberately
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -77,7 +96,7 @@ export default function Home() {
                 &quot;This helped me get out of a rut and make decisions I had been avoiding for months. menscoach.ai keeps me honest with myself.&quot;
               </p>
               <p className="mt-3 text-emerald-400 text-xs font-semibold">
-                Alex, 32  - Product manager
+                Alex, 32 - Product manager
               </p>
             </div>
 
@@ -86,7 +105,7 @@ export default function Home() {
                 &quot;Feels like a grounded coach that actually understands what men are dealing with today. No fluff, just real reflection and next steps.&quot;
               </p>
               <p className="mt-3 text-emerald-400 text-xs font-semibold">
-                Daniel, 41  - Business owner
+                Daniel, 41 - Business owner
               </p>
             </div>
 
@@ -95,7 +114,7 @@ export default function Home() {
                 &quot;Not therapy, not hype. It has helped me stay disciplined, set boundaries, and show up better for my family.&quot;
               </p>
               <p className="mt-3 text-emerald-400 text-xs font-semibold">
-                Sam, 29  - Father of two
+                Sam, 29 - Father of two
               </p>
             </div>
           </div>
@@ -216,11 +235,11 @@ export default function Home() {
       <section className="relative py-24 bg-slate-950 text-slate-100" id="values">
         <div className="max-w-4xl mx-auto px-6">
           <h2 className="text-4xl font-bold text-center mb-12">
-            The Values menscoach.ai Is Built On
+            The Principles This Coach Is Built On
           </h2>
           <p className="text-center text-slate-400 max-w-2xl mx-auto mb-16">
-            menscoach.ai is directly powered by the Better Masculine Man framework.
-            Every answer, prompt, and reflection is influenced by these ten core values.
+            menscoach.ai translates the Better Masculine Man framework into a private,
+            practical AI coaching experience.
           </p>
 
           <div className="space-y-20 border-l border-slate-800 pl-6 ml-3">
@@ -310,12 +329,27 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-800 bg-slate-950 py-6 text-center text-xs text-slate-500">
-        <p>menscoach.ai is an AI coaching tool inspired by Better Masculine Man.</p>
-        <p>Not a therapist. Not a crisis service. If you feel unsafe, contact local emergency support immediately.</p>
+        <p>
+          menscoach.ai is an AI coaching tool inspired by{" "}
+          <a
+            href="https://bettermasculineman.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-emerald-400 transition"
+          >
+            Better Masculine Man
+          </a>
+          .
+        </p>
+        <p>
+          Not a therapist. Not a crisis service. If you feel unsafe, contact local emergency support immediately.
+        </p>
         <p className="mt-2">
           <a href="/pricing" className="hover:text-emerald-400 transition">Pricing</a>
           <span className="mx-2 text-slate-700">|</span>
           <a href="/chat" className="hover:text-emerald-400 transition">Chat</a>
+          <span className="mx-2 text-slate-700">|</span>
+          <a href="/privacy" className="hover:text-emerald-400 transition">Privacy</a>
         </p>
       </footer>
     </main>
