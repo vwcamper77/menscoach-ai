@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { signIn, signOut } from "next-auth/react";
+import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 
 type MeResponse = {
   email?: string | null;
@@ -15,6 +16,7 @@ type MeResponse = {
 
 export default function TopNav() {
   const [me, setMe] = useState<MeResponse | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include", cache: "no-store" })
@@ -26,6 +28,7 @@ export default function TopNav() {
   const onboarded = Boolean(me?.profile?.onboardingComplete);
   const plan = me?.plan ?? "free";
   const isAuthed = Boolean(me?.email);
+  const isLanding = pathname === "/";
 
   async function startFresh() {
     const ok = window.confirm(
@@ -54,7 +57,7 @@ export default function TopNav() {
           </Link>
 
           {/* Keep onboarding behaviour: only show Dashboard link after onboarding */}
-          {onboarded && (
+          {onboarded && !isLanding && (
             <Link
               href={isAuthed ? "/dashboard" : "/login"}
               className="text-slate-300 hover:text-emerald-400 transition"
@@ -79,15 +82,26 @@ export default function TopNav() {
             </Link>
           )}
 
-          {/* Auth: Login or Logout */}
+          {/* Auth: Login/Register or Logout */}
           {!isAuthed ? (
-            <button
-              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-              className="text-slate-300 hover:text-emerald-400 transition text-xs"
-              title="Sign in to save and protect your data"
-            >
-              Login
-            </button>
+            <>
+              <Link
+                href="/login"
+                className="text-slate-300 hover:text-emerald-400 transition text-xs"
+                title="Sign in to save and protect your data"
+              >
+                Login
+              </Link>
+              {isLanding && (
+                <Link
+                  href="/login"
+                  className="text-slate-300 hover:text-emerald-400 transition text-xs"
+                  title="Create your account"
+                >
+                  Register
+                </Link>
+              )}
+            </>
           ) : (
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
@@ -99,7 +113,7 @@ export default function TopNav() {
           )}
 
           {/* Anonymous-only: Start fresh */}
-          {!isAuthed ? (
+          {!isAuthed && !isLanding ? (
             <button
               onClick={startFresh}
               className="text-slate-500 hover:text-red-400 transition text-xs"
