@@ -1,15 +1,22 @@
-// app/login/LoginClient.tsx
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import TopNav from "@/components/TopNav";
+
+function getCallbackUrlFromLocation(): string {
+  if (typeof window === "undefined") return "/chat";
+  const sp = new URLSearchParams(window.location.search);
+  return sp.get("callbackUrl") ?? "/chat";
+}
 
 export default function LoginClient() {
   const [email, setEmail] = useState("");
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/chat";
+  const [callbackUrl, setCallbackUrl] = useState("/chat");
+
+  useEffect(() => {
+    setCallbackUrl(getCallbackUrlFromLocation());
+  }, []);
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -44,9 +51,7 @@ export default function LoginClient() {
               Email me a sign-in link
             </button>
 
-            <p className="mt-3 text-xs text-slate-400">
-              If you don't see it, check spam.
-            </p>
+            <p className="mt-3 text-xs text-slate-400">If you don't see it, check spam.</p>
           </div>
         </div>
       </section>
