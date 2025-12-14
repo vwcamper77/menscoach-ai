@@ -84,24 +84,13 @@ export default function TopNav() {
 
           {/* Auth: Login/Register or Logout */}
           {!isAuthed ? (
-            <>
-              <Link
-                href="/login"
-                className="text-slate-300 hover:text-emerald-400 transition text-xs"
-                title="Sign in to save and protect your data"
-              >
-                Login
-              </Link>
-              {isLanding && (
-                <Link
-                  href="/login"
-                  className="text-slate-300 hover:text-emerald-400 transition text-xs"
-                  title="Create your account"
-                >
-                  Register
-                </Link>
-              )}
-            </>
+            <Link
+              href="/login"
+              className="text-slate-300 hover:text-emerald-400 transition text-xs"
+              title="Sign in or create your account"
+            >
+              Login / Register
+            </Link>
           ) : (
             <button
               onClick={() => signOut({ callbackUrl: "/" })}

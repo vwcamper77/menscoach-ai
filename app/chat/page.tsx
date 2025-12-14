@@ -49,18 +49,51 @@ function makeId(prefix: string) {
   return `${prefix}-${rand}`;
 }
 
-function formatNameForOpener(
-  name: string | null,
-  onboarded: boolean,
-  skipped: boolean
-) {
+function formatNameForOpener(name: string | null) {
   if (!name) return null;
   const trimmed = name.trim();
   if (!trimmed) return null;
-  // If onboarding was completed (and not skipped), use lowercase.
-  // If onboarding was skipped or unknown, keep original casing.
-  if (onboarded && !skipped) return trimmed.toLowerCase();
-  return trimmed;
+  return capitalizeFirstLetter(trimmed);
+}
+
+function capitalizeFirstLetter(text: string) {
+  if (!text) return text;
+  return text[0].toUpperCase() + text.slice(1);
+}
+
+function decapitalizeFirstLetter(text: string) {
+  if (!text) return text;
+  return text[0].toLowerCase() + text.slice(1);
+}
+
+function stripLeadingName(content: string, name: string) {
+  const lowerName = name.toLowerCase();
+  let remaining = content.trimStart();
+  const prefixes = [
+    `${lowerName},`,
+    `hi ${lowerName}`,
+    `hi, ${lowerName}`,
+    `hey ${lowerName}`,
+    `hello ${lowerName}`,
+  ];
+
+  let matched = true;
+  while (matched) {
+    matched = false;
+    const lowerRemaining = remaining.toLowerCase();
+    const prefix = prefixes.find((p) => lowerRemaining.startsWith(p));
+    if (prefix) {
+      remaining = remaining.slice(prefix.length).trimStart();
+      if (remaining.startsWith(",")) remaining = remaining.slice(1).trimStart();
+      matched = true;
+    }
+  }
+
+  while (remaining.toLowerCase().startsWith(`${lowerName},`)) {
+    remaining = remaining.slice(`${lowerName},`.length).trimStart();
+  }
+
+  return remaining;
 }
 
 export default function ChatPage() {
@@ -174,18 +207,18 @@ export default function ChatPage() {
     if (messages.length > 0) return;
     if (!singleThreadHydrated) return;
 
-    const nameForOpener = formatNameForOpener(
-      profileName,
-      onboardingComplete,
-      onboardingSkipped
-    );
+    const nameForOpener = formatNameForOpener(profileName);
     const defaultMode: Mode = "grounding";
     const openers = openerByMode[defaultMode];
     const opener = openers[Math.floor(Math.random() * openers.length)];
+    const openerWithCase =
+      nameForOpener && nameForOpener.length > 0
+        ? decapitalizeFirstLetter(opener)
+        : opener;
     const prefixed =
       nameForOpener && nameForOpener.length > 0
-        ? `${nameForOpener}, ${opener}`
-        : opener;
+        ? `${nameForOpener}, ${openerWithCase}`
+        : openerWithCase;
 
     setMessages([
       {
@@ -199,8 +232,6 @@ export default function ChatPage() {
     messages.length,
     onboardingChecked,
     profileName,
-    onboardingComplete,
-    onboardingSkipped,
     singleThreadHydrated,
   ]);
 
@@ -210,28 +241,25 @@ export default function ChatPage() {
     if (canUseSubjects) return;
     if (messages.length === 0) return;
 
-    const formatted = formatNameForOpener(
-      profileName,
-      onboardingComplete,
-      onboardingSkipped
-    );
+    const formatted = formatNameForOpener(profileName);
     if (!formatted) return;
-
-    const first = messages[0];
-    if (first.role !== "assistant") return;
-    const alreadyNamed =
-      first.content.startsWith(`${formatted},`) ||
-      first.content.startsWith(`Hi ${formatted}`);
-
-    if (alreadyNamed) return;
 
     setMessages((prev) => {
       if (prev.length === 0) return prev;
+      const first = prev[0];
+      if (first.role !== "assistant") return prev;
+
+      const stripped = stripLeadingName(first.content, formatted);
+      const cleaned = decapitalizeFirstLetter(stripped);
+      const nextContent = `${formatted}, ${cleaned}`;
+
+      if (nextContent === first.content) return prev;
+
       const next = [...prev];
-      next[0] = { ...next[0], content: `${formatted}, ${next[0].content}` };
+      next[0] = { ...first, content: nextContent };
       return next;
     });
-  }, [profileName, canUseSubjects, messages, onboardingComplete, onboardingSkipped]);
+  }, [profileName, canUseSubjects, messages]);
   // Load messages for active subject (Pro/Elite)
   useEffect(() => {
     if (!onboardingChecked) return;

@@ -350,6 +350,10 @@ export default function Home() {
           <a href="/chat" className="hover:text-emerald-400 transition">Chat</a>
           <span className="mx-2 text-slate-700">|</span>
           <a href="/privacy" className="hover:text-emerald-400 transition">Privacy</a>
+          <span className="mx-2 text-slate-700">|</span>
+          <a href="/about" className="hover:text-emerald-400 transition">About</a>
+          <span className="mx-2 text-slate-700">|</span>
+          <a href="/contact" className="hover:text-emerald-400 transition">Contact</a>
         </p>
       </footer>
     </main>
