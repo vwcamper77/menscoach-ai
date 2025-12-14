@@ -1,108 +1,182 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
-import { getOrCreateUser } from "@/lib/users";
+import { getFirestore } from "@/lib/firebaseAdmin";
 
-type PaidPlan = "starter" | "pro" | "elite";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// IMPORTANT: must match /api/me cookie name
-const SESSION_COOKIE_NAME = "mc_session_id";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
+type Plan = "free" | "starter" | "pro" | "elite";
 
-function readCookie(req: Request, name: string): string | null {
-  const raw = req.headers.get("cookie");
-  if (!raw) return null;
+const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
-  const cookies = raw.split(";").map((c) => c.trim());
-  const target = cookies.find((c) => c.startsWith(`${name}=`));
-  if (!target) return null;
+// Price → plan mapping from env
+const PRICE_TO_PLAN: Record<string, Plan> = {
+  [process.env.STRIPE_PRICE_STARTER ?? ""]: "starter",
+  [process.env.STRIPE_PRICE_PRO ?? ""]: "pro",
+  [process.env.STRIPE_PRICE_ELITE ?? ""]: "elite",
+};
 
-  const value = target.slice(name.length + 1);
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
+function safeSessionId(sessionId: string) {
+  return sessionId.replaceAll("/", "_");
+}
+
+function planFromPrice(priceId: string | null | undefined): Plan | null {
+  if (!priceId) return null;
+  const plan = PRICE_TO_PLAN[priceId];
+  return plan ?? null;
+}
+
+async function updateUserPlan(opts: {
+  sessionId: string;
+  plan?: Plan;
+  customerId?: string | null;
+  subscriptionId?: string | null;
+  status?: string | null;
+  currentPeriodEnd?: number | null;
+}) {
+  const { sessionId, plan, customerId, subscriptionId, status, currentPeriodEnd } = opts;
+  const db = getFirestore();
+  const docId = safeSessionId(sessionId);
+
+  const patch: Record<string, any> = {
+    updatedAt: new Date(),
+  };
+
+  if (plan) patch.plan = plan;
+  if (customerId !== undefined) patch.stripeCustomerId = customerId ?? null;
+  if (subscriptionId !== undefined) patch.stripeSubscriptionId = subscriptionId ?? null;
+  if (status !== undefined) patch.stripeSubscriptionStatus = status ?? null;
+  if (currentPeriodEnd !== undefined) patch.stripeCurrentPeriodEnd = currentPeriodEnd ?? null;
+
+  await db.collection("mc_users").doc(docId).set(patch, { merge: true });
+}
+
+function getSessionIdFromMetadata(
+  obj: { metadata?: Record<string, any> } & { client_reference_id?: string | null }
+): string | null {
+  const meta = obj.metadata ?? {};
+  return (
+    (meta.sessionId as string) ||
+    (meta.session_id as string) ||
+    (meta.client_reference_id as string) ||
+    (obj.client_reference_id as string) ||
+    null
+  );
+}
+
+async function handleCheckoutSession(session: Stripe.Checkout.Session) {
+  const sessionId = getSessionIdFromMetadata(session);
+  if (!sessionId) {
+    console.error("Stripe webhook: missing sessionId on checkout.session.completed");
+    return;
+  }
+
+  const customerId =
+    typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+  const subscriptionId =
+    typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription?.id ?? null;
+
+  let plan = (session.metadata?.plan as Plan) ?? null;
+  let status: string | null = null;
+  let currentPeriodEnd: number | null = null;
+
+  if (subscriptionId) {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+      expand: ["items.data.price"],
+    });
+    status = subscription.status ?? null;
+    currentPeriodEnd = subscription.current_period_end
+      ? subscription.current_period_end * 1000
+      : null;
+    if (!plan) {
+      plan = planFromPrice(subscription.items.data[0]?.price?.id) ?? plan;
+    }
+  }
+
+  if (plan) {
+    await updateUserPlan({
+      sessionId,
+      plan,
+      customerId,
+      subscriptionId,
+      status,
+      currentPeriodEnd,
+    });
   }
 }
 
-function resolveSessionId(req: Request): { sessionId: string; shouldSetCookie: boolean } {
-  const cookieId = readCookie(req, SESSION_COOKIE_NAME);
-  if (cookieId) return { sessionId: cookieId, shouldSetCookie: false };
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription, cancelled = false) {
+  const sessionId = getSessionIdFromMetadata(subscription);
+  if (!sessionId) {
+    console.error("Stripe webhook: missing sessionId on subscription event");
+    return;
+  }
 
-  // Optional fallback during transition
-  const headerId = req.headers.get("x-session-id");
-  if (headerId) return { sessionId: headerId, shouldSetCookie: true };
+  const priceId = subscription.items.data[0]?.price?.id;
+  const plan = cancelled ? "free" : planFromPrice(priceId);
+  const status = subscription.status ?? null;
+  const currentPeriodEnd = subscription.current_period_end
+    ? subscription.current_period_end * 1000
+    : null;
+  const customerId =
+    typeof subscription.customer === "string"
+      ? subscription.customer
+      : subscription.customer?.id ?? null;
 
-  const generated = crypto.randomUUID();
-  return { sessionId: generated, shouldSetCookie: true };
-}
-
-function getPriceId(plan: PaidPlan) {
-  const map: Record<PaidPlan, string | undefined> = {
-    starter: process.env.STRIPE_PRICE_STARTER,
-    pro: process.env.STRIPE_PRICE_PRO,
-    elite: process.env.STRIPE_PRICE_ELITE,
-  };
-
-  const priceId = map[plan];
-  if (!priceId) throw new Error(`Missing Stripe price env for plan: ${plan}`);
-  return priceId;
+  await updateUserPlan({
+    sessionId,
+    plan: plan ?? undefined,
+    customerId,
+    subscriptionId: subscription.id,
+    status,
+    currentPeriodEnd,
+  });
 }
 
 export async function POST(req: Request) {
-  try {
-    const { plan } = (await req.json()) as { plan?: PaidPlan };
-    if (!plan || !["starter", "pro", "elite"].includes(plan)) {
-      return NextResponse.json(
-        { error: { code: "BAD_REQUEST", message: "Invalid plan" } },
-        { status: 400 }
-      );
-    }
-
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-    if (!siteUrl) {
-      return NextResponse.json(
-        { error: { code: "SERVER_MISCONFIG", message: "Missing NEXT_PUBLIC_SITE_URL" } },
-        { status: 500 }
-      );
-    }
-
-    const { sessionId, shouldSetCookie } = resolveSessionId(req);
-
-    // Ensure user exists under this exact id (matches /api/me identity)
-    await getOrCreateUser(sessionId);
-
-    const checkout = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [{ price: getPriceId(plan), quantity: 1 }],
-      allow_promotion_codes: true,
-      success_url: `${siteUrl}/chat?upgraded=${plan}`,
-      cancel_url: `${siteUrl}/pricing`,
-
-      // CRITICAL: webhook will upgrade by this sessionId
-      metadata: { sessionId, plan },
-
-      // optional debug helper
-      client_reference_id: sessionId,
-    });
-
-    const res = NextResponse.json({ url: checkout.url }, { status: 200 });
-
-    if (shouldSetCookie) {
-      res.cookies.set(SESSION_COOKIE_NAME, sessionId, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: COOKIE_MAX_AGE,
-        path: "/",
-      });
-    }
-
-    return res;
-  } catch (err: any) {
-    console.error("Stripe checkout error:", err?.message || err);
-    return NextResponse.json(
-      { error: { code: "SERVER_ERROR", message: "Failed to start checkout" } },
-      { status: 500 }
-    );
+  if (!WEBHOOK_SECRET) {
+    console.error("Stripe webhook: missing STRIPE_WEBHOOK_SECRET");
+    return NextResponse.json({ error: "not configured" }, { status: 500 });
   }
+
+  const sig = req.headers.get("stripe-signature");
+  if (!sig) {
+    return NextResponse.json({ error: "missing signature" }, { status: 400 });
+  }
+
+  let event: Stripe.Event;
+  try {
+    const body = await req.text();
+    event = stripe.webhooks.constructEvent(body, sig, WEBHOOK_SECRET);
+  } catch (err: any) {
+    console.error("Stripe webhook: signature verification failed", err?.message || err);
+    return NextResponse.json({ error: "invalid signature" }, { status: 400 });
+  }
+
+  try {
+    switch (event.type) {
+      case "checkout.session.completed":
+        await handleCheckoutSession(event.data.object as Stripe.Checkout.Session);
+        break;
+      case "customer.subscription.updated":
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, false);
+        break;
+      case "customer.subscription.deleted":
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, true);
+        break;
+      case "customer.subscription.created":
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, false);
+        break;
+      default:
+        break;
+    }
+  } catch (err) {
+    console.error("Stripe webhook handler error", err);
+    return NextResponse.json({ error: "handler error" }, { status: 500 });
+  }
+
+  return NextResponse.json({ received: true });
 }

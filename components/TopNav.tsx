@@ -29,6 +29,7 @@ export default function TopNav() {
   const plan = me?.plan ?? "free";
   const isAuthed = Boolean(me?.email);
   const isLanding = pathname === "/";
+  const showDashboard = isAuthed && !isLanding;
 
   async function startFresh() {
     const ok = window.confirm(
@@ -56,8 +57,8 @@ export default function TopNav() {
             Chat
           </Link>
 
-          {/* Keep onboarding behaviour: only show Dashboard link after onboarding */}
-          {onboarded && !isLanding && (
+          {/* Dashboard accessible once logged in so users can manage/delete account */}
+          {showDashboard && (
             <Link
               href={isAuthed ? "/dashboard" : "/login"}
               className="text-slate-300 hover:text-emerald-400 transition"
