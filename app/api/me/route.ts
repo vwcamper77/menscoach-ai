@@ -6,10 +6,8 @@ import { getEntitlements } from "@/lib/entitlements";
 import { getDailyUsage } from "@/lib/usage";
 import { getOrCreateUser } from "@/lib/users";
 
-// MUST match your checkout route cookie name.
-// If your checkout route uses "mc_session", keep this.
-// If you changed checkout route to "mc_session_id", change this too.
-const COOKIE_NAME = "mc_session";
+// MUST match your session + checkout cookies.
+const COOKIE_NAME = "mc_session_id";
 
 type Plan = "free" | "starter" | "pro" | "elite";
 

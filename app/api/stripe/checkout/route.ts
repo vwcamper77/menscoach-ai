@@ -5,7 +5,7 @@ import { getOrCreateUser } from "@/lib/users";
 type PaidPlan = "starter" | "pro" | "elite";
 
 // IMPORTANT: this must match the cookie your whole app uses
-const SESSION_COOKIE_NAME = "mc_session";
+const SESSION_COOKIE_NAME = "mc_session_id";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
 
 function readCookie(req: Request, name: string): string | null {
