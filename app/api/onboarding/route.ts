@@ -1,7 +1,5 @@
 // app/api/onboarding/route.ts
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/auth";
 import { getFirestore } from "@/lib/firebaseAdmin";
 
 const SESSION_COOKIE_NAME = "mc_session_id";
@@ -27,14 +25,8 @@ function resolveSessionId(req: Request): string | null {
 }
 
 export async function POST(req: Request) {
-  // Prefer authenticated user id so onboarding marks the same doc /api/me reads.
-  const session = await getServerSession(authOptions as any).catch(() => null);
-  const authUserId =
-    (session as any)?.user?.id ??
-    (session as any)?.userId ??
-    null;
-
-  const sessionId = authUserId ?? resolveSessionId(req);
+  // Always use the shared session id (cookie/header) so onboarding matches /api/me.
+  const sessionId = resolveSessionId(req);
 
   if (!sessionId) {
     return NextResponse.json(
