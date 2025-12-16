@@ -8,6 +8,10 @@ type PaidPlan = "starter" | "pro" | "elite";
 const SESSION_COOKIE_NAME = "mc_session_id";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
 
+function sanitizeSessionId(sessionId: string) {
+  return sessionId.replaceAll("/", "_");
+}
+
 function readCookie(req: Request, name: string): string | null {
   const raw = req.headers.get("cookie");
   if (!raw) return null;
@@ -26,15 +30,19 @@ function readCookie(req: Request, name: string): string | null {
 
 function resolveSessionId(req: Request): { sessionId: string; shouldSetCookie: boolean } {
   const cookieId = readCookie(req, SESSION_COOKIE_NAME);
-  if (cookieId) return { sessionId: cookieId, shouldSetCookie: false };
+  if (cookieId) {
+    const sanitized = sanitizeSessionId(cookieId);
+    const needsRewrite = sanitized !== cookieId;
+    return { sessionId: sanitized, shouldSetCookie: needsRewrite };
+  }
 
   // Optional fallback during transition (remove later)
   const headerId = req.headers.get("x-session-id");
-  if (headerId) return { sessionId: headerId, shouldSetCookie: true };
+  if (headerId) return { sessionId: sanitizeSessionId(headerId), shouldSetCookie: true };
 
   // Last resort: generate (should be rare if client calls /api/session)
   const generated = crypto.randomUUID();
-  return { sessionId: generated, shouldSetCookie: true };
+  return { sessionId: sanitizeSessionId(generated), shouldSetCookie: true };
 }
 
 function getPriceId(plan: PaidPlan) {
@@ -78,11 +86,10 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       success_url: `${siteUrl}/chat?upgraded=${plan}`,
       cancel_url: `${siteUrl}/pricing`,
-
-      // CRITICAL: webhook uses this to upgrade the right user
       metadata: { sessionId, plan },
-
-      // Optional, helpful for debugging in Stripe
+      subscription_data: {
+        metadata: { sessionId, plan },
+      },
       client_reference_id: sessionId,
     });
 

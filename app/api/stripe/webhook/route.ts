@@ -78,6 +78,20 @@ async function linkEmailToSessionDoc(email: string, sessionIdRaw: string) {
   );
 }
 
+async function findSessionIdByCustomerId(customerId: string | null | undefined) {
+  if (!customerId) return null;
+
+  const db = getFirestore();
+  const qs = await db
+    .collection("mc_users")
+    .where("stripeCustomerId", "==", customerId)
+    .limit(1)
+    .get();
+
+  if (qs.empty) return null;
+  return safeSessionId(qs.docs[0].id);
+}
+
 function getSessionIdFromMetadata(
   obj: { metadata?: Record<string, any> | null | undefined } & {
     client_reference_id?: string | null;
@@ -91,33 +105,6 @@ function getSessionIdFromMetadata(
     (obj.client_reference_id as string) ||
     null
   );
-}
-
-async function findMcUserDocIdByStripe(
-  subscriptionId?: string | null,
-  customerId?: string | null
-): Promise<string | null> {
-  const db = getFirestore();
-
-  if (subscriptionId) {
-    const qs = await db
-      .collection("mc_users")
-      .where("stripeSubscriptionId", "==", subscriptionId)
-      .limit(1)
-      .get();
-    if (!qs.empty) return qs.docs[0].id;
-  }
-
-  if (customerId) {
-    const qs = await db
-      .collection("mc_users")
-      .where("stripeCustomerId", "==", customerId)
-      .limit(1)
-      .get();
-    if (!qs.empty) return qs.docs[0].id;
-  }
-
-  return null;
 }
 
 async function handleCheckoutSession(session: Stripe.Checkout.Session) {
@@ -162,28 +149,48 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
   }
 
   if (!plan) {
-    console.error("Stripe webhook: could not resolve plan for checkout.session.completed");
-    return;
+    console.error("Stripe webhook: could not resolve plan for checkout.session.completed", {
+      sessionId: sessionIdRaw,
+      docId,
+      subscriptionId,
+      customerId,
+    });
   }
 
-  // Write plan + stripe ids + email onto the upgraded mc_users doc
-  await patchMcUserByDocId(docId, {
+  console.log("Stripe webhook", {
+    eventType: "checkout.session.completed",
+    sessionId: sessionIdRaw,
+    docId,
+    customerId,
+    subscriptionId,
     plan,
+  });
+
+  const payload: Record<string, any> = {
     stripeCustomerId: customerId,
     stripeSubscriptionId: subscriptionId,
     stripeSubscriptionStatus: status,
     stripeCurrentPeriodEnd: currentPeriodEnd,
     authEmail: buyerEmail,
     email: buyerEmail, // helpful for searching and admin views
-  });
+  };
 
-  // Hard link email -> this session so /api/me resolves correctly
+  if (plan) {
+    payload.plan = plan;
+  }
+
+  await patchMcUserByDocId(docId, payload);
+
   if (buyerEmail) {
     await linkEmailToSessionDoc(buyerEmail, sessionIdRaw);
   }
 }
 
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription, cancelled = false) {
+async function handleSubscriptionUpdated(
+  subscription: Stripe.Subscription,
+  eventType: string,
+  cancelled = false
+) {
   const priceId = subscription.items.data[0]?.price?.id;
   const plan = cancelled ? "free" : planFromPrice(priceId);
   const status = subscription.status ?? null;
@@ -194,31 +201,43 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription, canc
       ? subscription.customer
       : subscription.customer?.id ?? null;
 
-  // IMPORTANT:
-  // subscription events do not reliably include checkout metadata.
-  // Find the correct mc_users doc by stripe ids instead.
-  const docId =
-    safeSessionId(getSessionIdFromMetadata(subscription) ?? "") ||
-    (await findMcUserDocIdByStripe(subscription.id, customerId));
+  const metadataSessionId = getSessionIdFromMetadata(subscription);
+  const fallbackSessionId =
+    customerId && !metadataSessionId ? await findSessionIdByCustomerId(customerId) : null;
+  const resolvedSessionId = metadataSessionId ?? fallbackSessionId;
 
-  const resolvedDocId =
-    docId && docId !== safeSessionId("") ? docId : await findMcUserDocIdByStripe(subscription.id, customerId);
-
-  if (!resolvedDocId) {
+  if (!resolvedSessionId) {
     console.error("Stripe webhook: could not resolve mc_users doc for subscription event", {
+      eventType,
       subscriptionId: subscription.id,
       customerId,
     });
     return;
   }
 
-  await patchMcUserByDocId(resolvedDocId, {
-    plan: plan ?? undefined,
+  const docId = safeSessionId(resolvedSessionId);
+
+  console.log("Stripe webhook", {
+    eventType,
+    sessionId: resolvedSessionId,
+    docId,
+    customerId,
+    subscriptionId: subscription.id,
+    plan,
+  });
+
+  const payload: Record<string, any> = {
     stripeCustomerId: customerId,
     stripeSubscriptionId: subscription.id,
     stripeSubscriptionStatus: status,
     stripeCurrentPeriodEnd: currentPeriodEnd,
-  });
+  };
+
+  if (plan) {
+    payload.plan = plan;
+  }
+
+  await patchMcUserByDocId(docId, payload);
 }
 
 export async function POST(req: Request) {
@@ -247,13 +266,13 @@ export async function POST(req: Request) {
         await handleCheckoutSession(event.data.object as Stripe.Checkout.Session);
         break;
       case "customer.subscription.updated":
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, false);
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, event.type, false);
         break;
       case "customer.subscription.deleted":
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, true);
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, event.type, true);
         break;
       case "customer.subscription.created":
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, false);
+        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, event.type, false);
         break;
       default:
         break;
