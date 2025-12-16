@@ -1,50 +1,9 @@
 ﻿import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getOrCreateUser } from "@/lib/users";
+import { resolveSessionId, setSessionIdCookie } from "@/lib/sessionId";
 
 type PaidPlan = "starter" | "pro" | "elite";
-
-// IMPORTANT: this must match the cookie your whole app uses
-const SESSION_COOKIE_NAME = "mc_session_id";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
-
-function sanitizeSessionId(sessionId: string) {
-  return sessionId.replaceAll("/", "_");
-}
-
-function readCookie(req: Request, name: string): string | null {
-  const raw = req.headers.get("cookie");
-  if (!raw) return null;
-
-  const cookies = raw.split(";").map((c) => c.trim());
-  const target = cookies.find((c) => c.startsWith(`${name}=`));
-  if (!target) return null;
-
-  const value = target.slice(name.length + 1);
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function resolveSessionId(req: Request): { sessionId: string; shouldSetCookie: boolean } {
-  const cookieId = readCookie(req, SESSION_COOKIE_NAME);
-  if (cookieId) {
-    const sanitized = sanitizeSessionId(cookieId);
-    const needsRewrite = sanitized !== cookieId;
-    return { sessionId: sanitized, shouldSetCookie: needsRewrite };
-  }
-
-  // Optional fallback during transition (remove later)
-  const headerId = req.headers.get("x-session-id");
-  if (headerId) return { sessionId: sanitizeSessionId(headerId), shouldSetCookie: true };
-
-  // Last resort: generate (should be rare if client calls /api/session)
-  const generated = crypto.randomUUID();
-  return { sessionId: sanitizeSessionId(generated), shouldSetCookie: true };
-}
-
 function getPriceId(plan: PaidPlan) {
   const map: Record<PaidPlan, string | undefined> = {
     starter: process.env.STRIPE_PRICE_STARTER,
@@ -75,7 +34,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const { sessionId, shouldSetCookie } = resolveSessionId(req);
+    const resolution = resolveSessionId(req, { allowHeader: true, generateIfMissing: true });
+    if (!resolution) {
+      throw new Error("Unable to resolve session id for checkout");
+    }
+    const { sessionId, shouldSetCookie } = resolution;
 
     // Ensure user doc exists before checkout
     await getOrCreateUser(sessionId);
@@ -96,13 +59,7 @@ export async function POST(req: Request) {
     const res = NextResponse.json({ url: checkout.url }, { status: 200 });
 
     if (shouldSetCookie) {
-      res.cookies.set(SESSION_COOKIE_NAME, sessionId, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: COOKIE_MAX_AGE,
-        path: "/",
-      });
+      setSessionIdCookie(res, sessionId);
     }
 
     return res;

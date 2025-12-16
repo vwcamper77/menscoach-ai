@@ -100,8 +100,8 @@ export default function ChatPage() {
   const router = useRouter();
 
   const [onboardingChecked, setOnboardingChecked] = useState(false);
-  const [onboardingComplete, setOnboardingComplete] = useState(false);
-  const [onboardingSkipped, setOnboardingSkipped] = useState(false);
+  const [, setOnboardingComplete] = useState(false);
+  const [, setOnboardingSkipped] = useState(false);
 
   const [profileName, setProfileName] = useState<string | null>(null);
   const [singleThreadHydrated, setSingleThreadHydrated] = useState(false);

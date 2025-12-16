@@ -2,6 +2,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { decryptJson, encryptJson } from "./crypto";
 import { getFirestore } from "./firebaseAdmin";
+import { sanitizeSessionId } from "./sessionId";
 
 type StoredTurn = {
   role: "user" | "assistant";
@@ -18,10 +19,6 @@ export type UserMemory = {
 const COLLECTION = "mc_sessions";
 const MAX_TURNS = 20;
 const EMPTY_MEMORY: UserMemory = { history: [] };
-
-function safeSessionId(sessionId: string) {
-  return sessionId.replaceAll("/", "_");
-}
 
 function stripUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   const out: Record<string, any> = {};
@@ -116,7 +113,7 @@ function buildEncryptedDoc(
 
 export async function getMemory(sessionId: string): Promise<UserMemory | null> {
   const db = getFirestore();
-  const docId = safeSessionId(sessionId);
+  const docId = sanitizeSessionId(sessionId);
 
   const snap = await db.collection(COLLECTION).doc(docId).get();
   if (!snap.exists) return null;
@@ -132,7 +129,7 @@ export async function appendToHistory(
   turns: StoredTurn[]
 ): Promise<void> {
   const db = getFirestore();
-  const docId = safeSessionId(sessionId);
+  const docId = sanitizeSessionId(sessionId);
   const ref = db.collection(COLLECTION).doc(docId);
 
   await db.runTransaction(async (tx: any) => {
@@ -162,7 +159,7 @@ export async function saveMemory(
   data: Partial<Omit<UserMemory, "history">>
 ): Promise<void> {
   const db = getFirestore();
-  const docId = safeSessionId(sessionId);
+  const docId = sanitizeSessionId(sessionId);
   const ref = db.collection(COLLECTION).doc(docId);
 
   const cleaned = stripUndefined(data as Record<string, any>);

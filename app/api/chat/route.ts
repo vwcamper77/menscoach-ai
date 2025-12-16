@@ -11,9 +11,9 @@ import { getUserPlan } from "@/lib/users";
 import { addMessage, getSubject, listMessages } from "@/lib/subjects";
 import { incrementDailyUsage } from "@/lib/usage";
 import { Mode, MODE_PROMPTS } from "@/lib/modes";
+import { resolveSessionId } from "@/lib/sessionId";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const SESSION_COOKIE_NAME = "mc_session_id";
 
 type Archetype = "mentor" | "warrior" | "father";
 
@@ -27,34 +27,6 @@ type ChatBody = {
   currentChallenge?: string;
   mode?: Mode;
 };
-
-function readCookie(req: Request, name: string): string | null {
-  const raw = req.headers.get("cookie");
-  if (!raw) return null;
-
-  const cookies = raw.split(";").map((c) => c.trim());
-  const target = cookies.find((c) => c.startsWith(`${name}=`));
-  if (!target) return null;
-
-  const value = target.slice(name.length + 1);
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function resolveSessionId(req: Request): string | null {
-  // Cookie is source of truth
-  const cookieId = readCookie(req, SESSION_COOKIE_NAME);
-  if (cookieId) return cookieId;
-
-  // Temporary fallback while you still pass x-session-id from client
-  const headerId = req.headers.get("x-session-id");
-  if (headerId) return headerId;
-
-  return null;
-}
 
 function errorResponse(
   code: string,
@@ -159,10 +131,12 @@ export async function POST(req: Request) {
       return errorResponse("NO_MESSAGES", "No messages provided", 400);
     }
 
-    const sessionId = resolveSessionId(req);
-    if (!sessionId) {
+    const sessionResolution = resolveSessionId(req, { allowHeader: true });
+    if (!sessionResolution) {
       return errorResponse("SESSION_REQUIRED", "Session is required.", 401);
     }
+
+    const sessionId = sessionResolution.sessionId;
 
     plan = await getUserPlan(sessionId);
     ent = getEntitlements(plan);

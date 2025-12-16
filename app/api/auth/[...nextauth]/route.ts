@@ -198,22 +198,32 @@ export const authOptions: NextAuthOptions = {
       if (!user?.email) return true;
 
       const email = user.email.toLowerCase().trim();
+      const userId = (user as any)?.id ?? null;
+      if (!userId) return true;
+
       const db = getFirestore();
-      const ref = db.collection("mc_users").doc(email);
+      const ref = db.collection("users").doc(userId);
       const snap = await ref.get();
+      const existing = snap.exists ? (snap.data() as Record<string, any>) : null;
       const now = new Date();
 
-      if (!snap.exists) {
-        await ref.set({
-          email,
-          name: user.name ?? null,
-          provider: account?.provider ?? null,
-          createdAt: now,
-          updatedAt: now,
-          lastSeenAt: now,
-          welcomeEmailSentAt: null,
-        });
+      const payload: Record<string, any> = {
+        email,
+        name: user.name ?? null,
+        provider: account?.provider ?? null,
+        updatedAt: now,
+        lastSeenAt: now,
+      };
 
+      if (!snap.exists) {
+        payload.createdAt = now;
+      }
+
+      await ref.set(payload, { merge: true });
+
+      const hasWelcome = Boolean(existing?.welcomeEmailSentAt);
+
+      if (!hasWelcome) {
         const welcome = buildWelcomeEmail({
           name: user.name ?? null,
           email,
@@ -248,14 +258,7 @@ export const authOptions: NextAuthOptions = {
           },
           { merge: true }
         );
-
-        return true;
       }
-
-      await ref.set(
-        { lastSeenAt: now, updatedAt: now },
-        { merge: true }
-      );
 
       return true;
     },

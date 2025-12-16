@@ -144,7 +144,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account }) {
       if (user?.email) token.email = user.email;
 
-      // stable id (works for both User and AdapterUser)
+      // stable id (User | AdapterUser)
       if ((user as any)?.id) (token as any).id = (user as any).id;
 
       // provider only available on sign-in

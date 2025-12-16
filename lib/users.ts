@@ -1,12 +1,9 @@
 import { getFirestore } from "./firebaseAdmin";
 import { Plan } from "./entitlements";
+import { sanitizeSessionId } from "./sessionId";
 
 const USERS_COLLECTION = "mc_users";
 const DEFAULT_PLAN: Plan = "free";
-
-function safeSessionId(sessionId: string) {
-  return sessionId.replaceAll("/", "_");
-}
 
 export type UserRecord = {
   plan: Plan;
@@ -16,7 +13,7 @@ export type UserRecord = {
 
 export async function getOrCreateUser(sessionId: string): Promise<UserRecord> {
   const db = getFirestore();
-  const docId = safeSessionId(sessionId);
+  const docId = sanitizeSessionId(sessionId);
   const ref = db.collection(USERS_COLLECTION).doc(docId);
   const snap = await ref.get();
 

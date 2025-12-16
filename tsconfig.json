@@ -16,7 +16,9 @@
     "ignoreDeprecations": "5.0",
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      { "name": "next" }
+    ],
     "paths": {
       "@/*": ["./*"]
     }
@@ -25,6 +27,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.d.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

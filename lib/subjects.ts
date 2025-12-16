@@ -91,7 +91,9 @@ export async function getSubject(sessionId: string, subjectId: string): Promise<
     throw err;
   }
 
-  const { id: _ignored, ...data } = snap.data() as SubjectRecord;
+  const { id: omittedId, ...data } = snap.data() as SubjectRecord;
+  void omittedId;
+
   if (data.userId !== sessionId) {
     const err = new Error("Subject not found.");
     (err as any).code = "NOT_FOUND";

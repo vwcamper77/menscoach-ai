@@ -15,7 +15,7 @@ async function deleteWhere(db: FirebaseFirestore.Firestore, collection: string, 
   await batch.commit();
 }
 
-export async function POST(req: Request) {
+export async function POST(_req: Request) {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email ?? null;
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { getFirestore } from "@/lib/firebaseAdmin";
+import { sanitizeSessionId } from "@/lib/sessionId";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,10 +18,6 @@ const PRICE_TO_PLAN: Record<string, Plan> = {
   [process.env.STRIPE_PRICE_PRO ?? ""]: "pro",
   [process.env.STRIPE_PRICE_ELITE ?? ""]: "elite",
 };
-
-function safeSessionId(sessionId: string) {
-  return sessionId.replaceAll("/", "_");
-}
 
 function normalizeEmail(email: string | null | undefined) {
   const e = (email ?? "").trim().toLowerCase();
@@ -71,7 +68,7 @@ async function linkEmailToSessionDoc(email: string, sessionIdRaw: string) {
 
   await db.collection("mc_user_links").doc(e).set(
     {
-      sessionId: safeSessionId(sessionIdRaw),
+      sessionId: sanitizeSessionId(sessionIdRaw),
       updatedAt: new Date(),
     },
     { merge: true }
@@ -89,7 +86,7 @@ async function findSessionIdByCustomerId(customerId: string | null | undefined) 
     .get();
 
   if (qs.empty) return null;
-  return safeSessionId(qs.docs[0].id);
+  return sanitizeSessionId(qs.docs[0].id);
 }
 
 function getSessionIdFromMetadata(
@@ -107,15 +104,27 @@ function getSessionIdFromMetadata(
   );
 }
 
-async function handleCheckoutSession(session: Stripe.Checkout.Session) {
-  const sessionIdRaw = getSessionIdFromMetadata(session);
-  if (!sessionIdRaw) {
-    console.error("Stripe webhook: missing sessionId on checkout.session.completed");
-    return;
+async function resolveWebhookDocId(
+  eventType: string,
+  payload: { metadata?: Record<string, any> | null | undefined; client_reference_id?: string | null },
+  customerId: string | null
+): Promise<string | null> {
+  const metadataSessionId = getSessionIdFromMetadata(payload);
+  const candidate =
+    metadataSessionId ?? (customerId ? await findSessionIdByCustomerId(customerId) : null);
+
+  if (!candidate) {
+    console.error("Stripe webhook: could not resolve mc_users doc for event", {
+      eventType,
+      customerId,
+    });
+    return null;
   }
 
-  const docId = safeSessionId(sessionIdRaw);
+  return sanitizeSessionId(candidate);
+}
 
+async function handleCheckoutSession(session: Stripe.Checkout.Session) {
   const customerId =
     typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
 
@@ -127,6 +136,11 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
   const buyerEmail = normalizeEmail(
     session.customer_details?.email ?? session.customer_email ?? null
   );
+
+  const docId = await resolveWebhookDocId("checkout.session.completed", session, customerId);
+  if (!docId) {
+    return;
+  }
 
   let plan = (session.metadata?.plan as Plan) ?? null;
   let status: string | null = null;
@@ -150,7 +164,6 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
 
   if (!plan) {
     console.error("Stripe webhook: could not resolve plan for checkout.session.completed", {
-      sessionId: sessionIdRaw,
       docId,
       subscriptionId,
       customerId,
@@ -159,7 +172,6 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
 
   console.log("Stripe webhook", {
     eventType: "checkout.session.completed",
-    sessionId: sessionIdRaw,
     docId,
     customerId,
     subscriptionId,
@@ -182,7 +194,7 @@ async function handleCheckoutSession(session: Stripe.Checkout.Session) {
   await patchMcUserByDocId(docId, payload);
 
   if (buyerEmail) {
-    await linkEmailToSessionDoc(buyerEmail, sessionIdRaw);
+    await linkEmailToSessionDoc(buyerEmail, docId);
   }
 }
 
@@ -200,26 +212,13 @@ async function handleSubscriptionUpdated(
     typeof subscription.customer === "string"
       ? subscription.customer
       : subscription.customer?.id ?? null;
-
-  const metadataSessionId = getSessionIdFromMetadata(subscription);
-  const fallbackSessionId =
-    customerId && !metadataSessionId ? await findSessionIdByCustomerId(customerId) : null;
-  const resolvedSessionId = metadataSessionId ?? fallbackSessionId;
-
-  if (!resolvedSessionId) {
-    console.error("Stripe webhook: could not resolve mc_users doc for subscription event", {
-      eventType,
-      subscriptionId: subscription.id,
-      customerId,
-    });
+  const docId = await resolveWebhookDocId(eventType, subscription, customerId);
+  if (!docId) {
     return;
   }
 
-  const docId = safeSessionId(resolvedSessionId);
-
   console.log("Stripe webhook", {
     eventType,
-    sessionId: resolvedSessionId,
     docId,
     customerId,
     subscriptionId: subscription.id,

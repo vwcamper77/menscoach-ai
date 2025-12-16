@@ -1,4 +1,5 @@
 import { getFirestore } from "./firebaseAdmin";
+import { sanitizeSessionId } from "./sessionId";
 
 const LINK_COLLECTION = "mc_user_links";
 
@@ -10,10 +11,6 @@ function encodeEmailDocId(email: string) {
   const normalized = normalizeEmail(email);
   const base64 = Buffer.from(normalized).toString("base64");
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function sanitizeSessionId(sessionId: string) {
-  return sessionId.replaceAll("/", "_");
 }
 
 export async function getLinkedSessionId(email: string): Promise<string | null> {

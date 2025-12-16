@@ -1,12 +1,8 @@
 import { getFirestore } from "./firebaseAdmin";
 import { EntitlementError } from "./entitlements";
+import { sanitizeSessionId } from "./sessionId";
 
 const USAGE_COLLECTION = "mc_usage";
-
-function safeSessionId(sessionId: string) {
-  // Defensive: Firestore doc-safe id
-  return sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
 
 export type UsageRecord = {
   sessionId: string;
@@ -17,7 +13,7 @@ export type UsageRecord = {
 };
 
 function usageDocId(sessionId: string, dateKey: string) {
-  return `${safeSessionId(sessionId)}_${dateKey}`;
+  return `${sanitizeSessionId(sessionId)}_${dateKey}`;
 }
 
 export async function getDailyUsage(

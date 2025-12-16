@@ -2,34 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listMessages } from "@/lib/subjects";
 import { getEntitlements, EntitlementError, Plan, Entitlements } from "@/lib/entitlements";
 import { getUserPlan } from "@/lib/users";
-
-const SESSION_COOKIE_NAME = "mc_session_id";
-
-function cleanSessionId(value?: string | null) {
-  return value ? value.replaceAll("/", "_") : null;
-}
-
-function readSessionFromCookie(req: NextRequest): string | null {
-  const raw = req.headers.get("cookie");
-  if (!raw) return null;
-  const cookies = raw.split(";").map((c) => c.trim());
-  const target = cookies.find((c) => c.startsWith(`${SESSION_COOKIE_NAME}=`));
-  if (!target) return null;
-  const value = target.slice(SESSION_COOKIE_NAME.length + 1);
-  try {
-    return cleanSessionId(decodeURIComponent(value));
-  } catch {
-    return cleanSessionId(value);
-  }
-}
-
-function resolveSessionId(req: NextRequest): string | null {
-  const cookieId = readSessionFromCookie(req);
-  if (cookieId) return cookieId;
-  const headerId = cleanSessionId(req.headers.get("x-session-id"));
-  if (headerId) return headerId;
-  return null;
-}
+import { resolveSessionId } from "@/lib/sessionId";
 
 function errorResponse(
   code: string,
@@ -49,10 +22,12 @@ export async function GET(
   let ent: Entitlements | undefined;
 
   try {
-    const sessionId = resolveSessionId(req);
-    if (!sessionId) {
+    const sessionResolution = resolveSessionId(req, { allowHeader: true });
+    if (!sessionResolution) {
       return errorResponse("SESSION_REQUIRED", "Session is required.", 401);
     }
+
+    const sessionId = sessionResolution.sessionId;
 
     plan = await getUserPlan(sessionId);
     ent = getEntitlements(plan);

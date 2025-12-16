@@ -61,14 +61,14 @@ Other scripts: `npm run lint`, `npm run build`, `npm run start`.
 - `mc_usage`: daily message counters used for plan limits.
 
 ## API map
-- `GET/POST /api/session` — issues the httpOnly session cookie.
-- `GET /api/me` — returns plan, entitlements, usage, onboarding profile.
-- `POST /api/onboarding` — saves profile and marks onboarding complete.
-- `POST /api/chat` — main chat handler; respects entitlements and subject modes.
-- `GET/POST /api/subjects` — list/create subjects (Pro+).
-- `GET /api/subjects/:id/messages` — fetch subject history.
-- `POST /api/stripe/checkout` — starts Checkout for a plan; falls back to chat when Stripe is not configured.
-- `POST /api/stripe/webhook` — updates plans on subscription events.
+- `GET/POST /api/session` ï¿½ issues the httpOnly session cookie.
+- `GET /api/me` ï¿½ returns plan, entitlements, usage, onboarding profile.
+- `POST /api/onboarding` ï¿½ saves profile and marks onboarding complete.
+- `POST /api/chat` ï¿½ main chat handler; respects entitlements and subject modes.
+- `GET/POST /api/subjects` ï¿½ list/create subjects (Pro+).
+- `GET /api/subjects/:id/messages` ï¿½ fetch subject history.
+- `POST /api/stripe/checkout` ï¿½ starts Checkout for a plan; falls back to chat when Stripe is not configured.
+- `POST /api/stripe/webhook` ï¿½ updates plans on subscription events.
 
 ## Stripe webhook in dev
 ```
@@ -78,3 +78,6 @@ Copy the printed signing secret into `STRIPE_WEBHOOK_SECRET`.
 
 ## Resetting
 If you want a clean slate locally, call `POST /api/session/reset` to drop the cookie; the next `/api/session` call will issue a new session id.
+
+
+Yes thank you
