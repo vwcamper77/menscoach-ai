@@ -3,7 +3,7 @@ import { FirestoreAdapter } from "@auth/firebase-adapter";
 import EmailProvider from "next-auth/providers/email";
 import GoogleProvider from "next-auth/providers/google";
 import { getFirestore } from "@/lib/firebaseAdmin";
-import { mailer } from "@/lib/mailer";
+import { getMailer } from "@/lib/mailer";
 
 /* ---------------- helpers ---------------- */
 
@@ -135,7 +135,8 @@ async function sendEmail(params: {
   from?: string;
   headers?: Record<string, string>;
 }) {
-  await mailer.sendMail({
+   const mailer = getMailer();
+    await mailer.sendMail({
     from: params.from ?? process.env.EMAIL_FROM ?? process.env.SMTP_USER!,
     to: params.to,
     subject: params.subject,
