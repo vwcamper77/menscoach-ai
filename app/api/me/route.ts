@@ -25,16 +25,19 @@ function utcDateKey(d = new Date()) {
 }
 
 function isPaidPlan(plan: unknown): plan is Plan {
-  return plan === "starter" || plan === "pro" || plan === "elite";
+  const v = typeof plan === "string" ? plan.trim().toLowerCase() : "";
+  return v === "starter" || v === "pro" || v === "elite";
 }
 
 function coercePlan(value: unknown): Plan {
-  return isPaidPlan(value) ? value : "free";
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (v === "starter" || v === "pro" || v === "elite") return v as Plan;
+  return "free";
 }
 
 function isPaidDoc(doc: Record<string, unknown> | null | undefined) {
   if (!doc) return false;
-  const plan = typeof doc.plan === "string" ? doc.plan : null;
+  const plan = typeof doc.plan === "string" ? doc.plan.trim().toLowerCase() : null;
   const hasStripeCustomerId =
     typeof doc.stripeCustomerId === "string" && doc.stripeCustomerId.trim().length > 0;
   return (plan !== null && plan !== "free") || hasStripeCustomerId;
