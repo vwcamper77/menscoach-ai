@@ -13,7 +13,7 @@ import {
   unlinkEmailSession,
 } from "@/lib/sessionLink";
 import { stripe } from "@/lib/stripe";
-import { resolveSessionId, setSessionIdCookie } from "@/lib/sessionId";
+import { resolveSessionId, setSessionIdCookie, sanitizeSessionId } from "@/lib/sessionId";
 
 type Plan = "free" | "starter" | "pro" | "elite";
 
@@ -21,12 +21,15 @@ function utcDateKey(d = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
-function coercePlan(value: any): Plan {
-  if (value === "starter" || value === "pro" || value === "elite") return value;
-  return "free";
+function isPaidPlan(plan: unknown): plan is Plan {
+  return plan === "starter" || plan === "pro" || plan === "elite";
 }
 
-function isPaidDoc(doc: Record<string, any> | null | undefined) {
+function coercePlan(value: unknown): Plan {
+  return isPaidPlan(value) ? value : "free";
+}
+
+function isPaidDoc(doc: Record<string, unknown> | null | undefined) {
   if (!doc) return false;
   const plan = typeof doc.plan === "string" ? doc.plan : null;
   const hasStripeCustomerId =
@@ -41,13 +44,9 @@ async function findPaidSessionIdByStripeEmail(
   const emailLower = email.toLowerCase().trim();
   if (!emailLower) return null;
 
-  // Try Stripe customers by email. Prefer the most recently created one.
-  // customers.list supports { email } filter.
   const customers = await stripe.customers.list({ email: emailLower, limit: 10 });
-
   if (!customers.data.length) return null;
 
-  // For each customer, see if we have a mc_users doc tied to stripeCustomerId
   for (const c of customers.data) {
     const qs = await db
       .collection("mc_users")
@@ -57,8 +56,7 @@ async function findPaidSessionIdByStripeEmail(
 
     if (qs.empty) continue;
 
-    // Prefer a paid doc among matches
-    const docs = qs.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, any> }));
+    const docs = qs.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }));
     const paid = docs.find((x) => isPaidDoc(x.data));
     return (paid ?? docs[0]).id;
   }
@@ -74,28 +72,35 @@ export async function GET(req: NextRequest) {
   const email = emailRaw ? String(emailRaw).toLowerCase().trim() : null;
 
   const resolution = resolveSessionId(req, { allowHeader: true, generateIfMissing: true });
-  if (!resolution) {
-    throw new Error("Unable to resolve session id");
-  }
+  if (!resolution) throw new Error("Unable to resolve session id");
 
-  const { sessionId: initialSessionId, cookieSessionId, shouldSetCookie: resolverSetCookie } = resolution;
+  const {
+    sessionId: initialSessionIdRaw,
+    cookieSessionId: cookieSessionIdRaw,
+    shouldSetCookie: resolverSetCookie,
+  } = resolution;
+
+  // Canonicalize ids ONCE
+  const initialSessionId = sanitizeSessionId(initialSessionIdRaw);
+  const cookieSessionId = cookieSessionIdRaw ? sanitizeSessionId(cookieSessionIdRaw) : null;
 
   let finalSessionId = initialSessionId;
   let shouldSetCookie = resolverSetCookie;
 
-  let cookieDocData: Record<string, any> | null = null;
+  let cookieDocData: Record<string, unknown> | null = null;
   if (cookieSessionId) {
     const cookieSnap = await db.collection("mc_users").doc(cookieSessionId).get();
-    cookieDocData = cookieSnap.exists ? (cookieSnap.data() as Record<string, any>) : null;
+    cookieDocData = cookieSnap.exists ? (cookieSnap.data() as Record<string, unknown>) : null;
   }
 
   if (email) {
     let linkedSessionId = await getLinkedSessionId(email);
-
     if (linkedSessionId) {
+      linkedSessionId = sanitizeSessionId(linkedSessionId);
+
       const linkedSnap = await db.collection("mc_users").doc(linkedSessionId).get();
       if (linkedSnap.exists) {
-        const linkedDoc = linkedSnap.data() as Record<string, any>;
+        const linkedDoc = linkedSnap.data() as Record<string, unknown>;
         const cookiePaid = isPaidDoc(cookieDocData);
         const linkedPaid = isPaidDoc(linkedDoc);
 
@@ -110,19 +115,19 @@ export async function GET(req: NextRequest) {
         }
       } else {
         await unlinkEmailSession(email);
-        linkedSessionId = null;
       }
     }
   }
 
   if (email) {
     const currentSnap = await db.collection("mc_users").doc(finalSessionId).get();
-    const currentDoc = currentSnap.exists ? (currentSnap.data() as Record<string, any>) : null;
+    const currentDoc = currentSnap.exists ? (currentSnap.data() as Record<string, unknown>) : null;
 
     if (!isPaidDoc(currentDoc)) {
       const stripePaidSessionId = await findPaidSessionIdByStripeEmail(db, email);
-      if (stripePaidSessionId && stripePaidSessionId !== finalSessionId) {
-        finalSessionId = stripePaidSessionId;
+      if (stripePaidSessionId) {
+        const stripeDocId = sanitizeSessionId(stripePaidSessionId);
+        if (stripeDocId !== finalSessionId) finalSessionId = stripeDocId;
       }
     }
   }
@@ -131,8 +136,10 @@ export async function GET(req: NextRequest) {
     shouldSetCookie = true;
   }
 
+  // Ensure user exists (writes only to sanitized id internally too)
   await getOrCreateUser(finalSessionId);
 
+  // IMPORTANT: write auth fields to the SAME canonical doc id
   if (email) {
     const authUserId = (session?.user as any)?.id ?? null;
 
@@ -152,6 +159,14 @@ export async function GET(req: NextRequest) {
   const user = snap.exists ? (snap.data() as any) : {};
 
   const plan = coercePlan(user?.plan);
+
+  console.log("api/me:doc state", {
+    docId: finalSessionId,
+    existed: snap.exists,
+    planRead: user?.plan ?? null,
+    returningPlan: plan,
+  });
+
   const entitlements = getEntitlements(plan);
   const usage = await getDailyUsage(finalSessionId, utcDateKey());
 
@@ -177,9 +192,6 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  if (shouldSetCookie) {
-    setSessionIdCookie(res, finalSessionId);
-  }
-
+  if (shouldSetCookie) setSessionIdCookie(res, finalSessionId);
   return res;
 }
