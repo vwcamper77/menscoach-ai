@@ -43,9 +43,18 @@ export async function POST(req: Request) {
     // Ensure user doc exists before checkout
     await getOrCreateUser(sessionId);
 
+    const priceId = getPriceId(plan);
+
+    console.log("stripe/checkout:create", {
+      docId: sessionId,
+      priceId,
+      plan,
+      email: null,
+    });
+
     const checkout = await stripe.checkout.sessions.create({
       mode: "subscription",
-      line_items: [{ price: getPriceId(plan), quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       success_url: `${siteUrl}/chat?upgraded=${plan}`,
       cancel_url: `${siteUrl}/pricing`,

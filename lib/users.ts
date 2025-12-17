@@ -9,6 +9,7 @@ export type UserRecord = {
   plan: Plan;
   createdAt: number;
   updatedAt: number;
+  lastSeenAt?: number;
 };
 
 export async function getOrCreateUser(sessionId: string): Promise<UserRecord> {
@@ -16,25 +17,49 @@ export async function getOrCreateUser(sessionId: string): Promise<UserRecord> {
   const docId = sanitizeSessionId(sessionId);
   const ref = db.collection(USERS_COLLECTION).doc(docId);
   const snap = await ref.get();
+  const now = Date.now();
 
-  if (snap.exists) {
-    const data = snap.data() as Partial<UserRecord>;
-    return {
-      plan: (data.plan as Plan) ?? DEFAULT_PLAN,
-      createdAt: data.createdAt ?? Date.now(),
-      updatedAt: data.updatedAt ?? Date.now(),
+  if (!snap.exists) {
+    const newUser: UserRecord = {
+      plan: DEFAULT_PLAN,
+      createdAt: now,
+      updatedAt: now,
+      lastSeenAt: now,
     };
+
+    console.log("getOrCreateUser:create", {
+      docId,
+      existed: false,
+      writing: newUser,
+      plan: newUser.plan,
+    });
+
+    await ref.set(newUser);
+    return newUser;
   }
 
-  const now = Date.now();
-  const newUser: UserRecord = {
-    plan: DEFAULT_PLAN,
-    createdAt: now,
+  const data = (snap.data() as Partial<UserRecord>) ?? {};
+  const plan = (data.plan as Plan) ?? DEFAULT_PLAN;
+  const updatePayload = {
     updatedAt: now,
+    lastSeenAt: now,
   };
 
-  await ref.set(newUser);
-  return newUser;
+  console.log("getOrCreateUser:exists", {
+    docId,
+    existed: true,
+    planRead: plan,
+    writing: updatePayload,
+  });
+
+  await ref.set(updatePayload, { merge: true });
+
+  return {
+    plan,
+    createdAt: data.createdAt ?? now,
+    updatedAt: updatePayload.updatedAt,
+    lastSeenAt: updatePayload.lastSeenAt,
+  };
 }
 
 export async function getUserPlan(sessionId: string): Promise<Plan> {

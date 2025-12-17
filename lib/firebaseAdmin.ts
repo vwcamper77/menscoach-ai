@@ -28,6 +28,18 @@ export function getAdminApp() {
     }),
   });
 
+  // IMPORTANT DEBUG (temporary)
+  try {
+    console.log("firebaseAdmin:init", {
+      projectIdEnv: projectId,
+      appProjectId: (admin.app().options as any)?.projectId ?? null,
+      googleCloudProject: process.env.GOOGLE_CLOUD_PROJECT ?? null,
+      clientEmail: clientEmail,
+    });
+  } catch {
+    console.log("firebaseAdmin:init_log_failed");
+  }
+
   return admin.app();
 }
 

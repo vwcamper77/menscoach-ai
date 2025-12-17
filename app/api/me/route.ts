@@ -15,6 +15,9 @@ import {
 import { stripe } from "@/lib/stripe";
 import { resolveSessionId, setSessionIdCookie, sanitizeSessionId } from "@/lib/sessionId";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 type Plan = "free" | "starter" | "pro" | "elite";
 
 function utcDateKey(d = new Date()) {
@@ -158,7 +161,7 @@ export async function GET(req: NextRequest) {
   const snap = await db.collection("mc_users").doc(finalSessionId).get();
   const user = snap.exists ? (snap.data() as any) : {};
 
-  const plan = coercePlan(user?.plan);
+  const plan = isPaidPlan(user?.plan) ? (user.plan as Plan) : coercePlan(user?.plan);
 
   console.log("api/me:doc state", {
     docId: finalSessionId,
@@ -193,5 +196,8 @@ export async function GET(req: NextRequest) {
   });
 
   if (shouldSetCookie) setSessionIdCookie(res, finalSessionId);
+  res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.headers.set("Pragma", "no-cache");
+  res.headers.set("Expires", "0");
   return res;
 }
