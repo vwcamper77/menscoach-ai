@@ -14,6 +14,16 @@ type MeResponse = {
   };
 };
 
+const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? process.env.ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+function isAdminEmail(email: string | null | undefined) {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
 export default function TopNav() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const pathname = usePathname();
@@ -29,7 +39,8 @@ export default function TopNav() {
   const plan = me?.plan ?? "free";
   const isAuthed = Boolean(me?.email);
   const isLanding = pathname === "/";
-  const showDashboard = isAuthed && !isLanding;
+  const showDashboard = isAuthed;
+  const isAdmin = me?.email ? isAdminEmail(me.email) : false;
 
   async function startFresh() {
     const ok = window.confirm(
@@ -60,11 +71,21 @@ export default function TopNav() {
           {/* Dashboard accessible once logged in so users can manage/delete account */}
           {showDashboard && (
             <Link
-              href={isAuthed ? "/dashboard" : "/login"}
+              href="/dashboard"
               className="text-slate-300 hover:text-emerald-400 transition"
               title={isAuthed ? "Open your dashboard" : "Sign in to access your dashboard"}
             >
               Dashboard
+            </Link>
+          )}
+
+          {isAdmin && (
+            <Link
+              href="/admin/dashboard"
+              className="text-slate-300 hover:text-emerald-400 transition"
+              title="Open admin dashboard"
+            >
+              Admin
             </Link>
           )}
 

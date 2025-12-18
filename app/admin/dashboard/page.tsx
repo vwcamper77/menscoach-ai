@@ -1,7 +1,7 @@
 // app/admin/dashboard/page.tsx
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { authOptions } from "../../../auth";
+import { authOptions } from "@/auth";
 import { getFirestore } from "@/lib/firebaseAdmin";
 
 type Row = {
@@ -136,12 +136,18 @@ async function getAdminDashboardRows(): Promise<Row[]> {
   return rows;
 }
 
+export const runtime = "nodejs";
+
 export default async function AdminDashboardPage() {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email ?? null;
 
-  if (!session || !isAdminEmail(email)) {
-    redirect("/");
+  if (!session?.user?.email) {
+    redirect("/login?callbackUrl=/admin/dashboard");
+  }
+
+  if (!isAdminEmail(email)) {
+    redirect("/dashboard");
   }
 
   const rows = await getAdminDashboardRows();

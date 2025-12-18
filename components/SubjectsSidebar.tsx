@@ -45,6 +45,21 @@ export default function SubjectsSidebar({
     [entitlements, plan]
   );
   const isPro = (ent.maxSubjects ?? 0) > 0;
+  const INDEX_MESSAGE = "Index building in Firestore. Try again in 1 to 2 minutes.";
+
+  const isIndexBuilding = (code: unknown, message?: unknown) => {
+    const normalizedCode = typeof code === "string" ? code.toUpperCase() : code;
+    if (
+      normalizedCode === "INDEX_BUILDING" ||
+      normalizedCode === "FAILED_PRECONDITION" ||
+      normalizedCode === 9
+    ) {
+      return true;
+    }
+
+    const msg = typeof message === "string" ? message.toUpperCase() : "";
+    return msg.includes("FAILED_PRECONDITION");
+  };
 
   useEffect(() => {
     async function loadSubjects() {
@@ -82,11 +97,17 @@ export default function SubjectsSidebar({
           setEntitlements(entFromError);
           onPlanResolved?.(planFromError);
           onEntitlementsResolved?.(entFromError);
-          setError(data?.error?.message ?? "Upgrade required for subjects.");
+          const friendly = isIndexBuilding(data?.error?.code, data?.error?.message);
+          setError(
+            friendly
+              ? INDEX_MESSAGE
+              : data?.error?.message ?? "Upgrade required for subjects."
+          );
           setSubjects([]);
         }
       } catch (err: any) {
-        setError(err?.message ?? "Failed to load subjects.");
+        const friendly = isIndexBuilding(err?.code, err?.message);
+        setError(friendly ? INDEX_MESSAGE : err?.message ?? "Failed to load subjects.");
       } finally {
         setLoading(false);
       }
@@ -150,7 +171,7 @@ export default function SubjectsSidebar({
           Subjects
         </div>
         {loading ? (
-          <div className="text-xs text-slate-500">Loading…</div>
+          <div className="text-xs text-slate-500">Loading...</div>
         ) : subjects.length === 0 ? (
           <div className="text-xs text-slate-500">Create your first subject.</div>
         ) : (
@@ -203,7 +224,7 @@ export default function SubjectsSidebar({
           disabled={creating || !title.trim()}
           className="w-full rounded-lg bg-emerald-500 text-slate-950 text-sm font-semibold py-2 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          {creating ? "Creating…" : "Create subject"}
+          {creating ? "Creating..." : "Create subject"}
         </button>
       </form>
 

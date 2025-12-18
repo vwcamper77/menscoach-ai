@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth";
+import { authOptions } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
@@ -10,11 +10,23 @@ function adminEmailsList() {
     .filter(Boolean);
 }
 
+function isAdminEmail(email: string | null | undefined) {
+  if (!email) return false;
+  const target = email.toLowerCase();
+  return adminEmailsList()
+    .map((s) => s.toLowerCase())
+    .includes(target);
+}
+
 export default async function AdminEntry() {
   const session = await getServerSession(authOptions);
 
-  // If already signed in, go dashboard
-  if (session?.user?.email) redirect("/admin/dashboard");
+  if (session?.user?.email) {
+    if (isAdminEmail(session.user.email)) {
+      redirect("/admin/dashboard");
+    }
+    redirect("/dashboard");
+  }
 
   const allowed = adminEmailsList();
   const allowedText =

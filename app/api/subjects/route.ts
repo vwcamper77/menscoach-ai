@@ -48,7 +48,20 @@ export async function GET(req: NextRequest) {
       return errorResponse(err.code, err.message, 403, plan, ent);
     }
 
-    const code = err?.code ?? "UNKNOWN";
+    const rawCode = err?.code ?? "UNKNOWN";
+    const codeUpper = typeof rawCode === "string" ? rawCode.toUpperCase() : rawCode;
+
+    if (codeUpper === "FAILED_PRECONDITION" || codeUpper === 9) {
+      return errorResponse(
+        "INDEX_BUILDING",
+        "Index building in Firestore. Try again in 1 to 2 minutes.",
+        503,
+        plan,
+        ent
+      );
+    }
+
+    const code = rawCode;
     const message = err?.message ?? "Unexpected error";
     const status = code === "NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 500;
     return errorResponse(code, message, status, plan, ent);
