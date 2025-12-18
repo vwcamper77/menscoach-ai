@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ChatUI, { ChatMessage } from "@/components/ChatUI";
-import SubjectsSidebar, { Subject } from "@/components/SubjectsSidebar";
+import ChatSidebar, { ChatListItem } from "@/components/ChatSidebar";
+import ChatHeader from "@/components/ChatHeader";
 import { getOrCreateSessionId } from "@/utils/sessionId";
 import { Entitlements, getEntitlements, Plan } from "@/lib/entitlements";
 import { Mode } from "@/lib/modes";
@@ -96,6 +97,14 @@ function stripLeadingName(content: string, name: string) {
   return remaining;
 }
 
+function autoTitleFromText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return "New chat";
+  const words = trimmed.split(/\s+/).slice(0, 6);
+  const title = words.join(" ");
+  return capitalizeFirstLetter(title);
+}
+
 export default function ChatPage() {
   const router = useRouter();
 
@@ -111,12 +120,14 @@ export default function ChatPage() {
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
+  const [activeChat, setActiveChat] = useState<ChatListItem | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [blockingError, setBlockingError] = useState<{
     code: string;
     message: string;
   } | null>(null);
+  const [sidebarRefresh, setSidebarRefresh] = useState(0);
+  const [focusSignal, setFocusSignal] = useState(0);
 
   const canUseSubjects = useMemo(
     () => (entitlements.maxSubjects ?? 0) > 0,
@@ -265,7 +276,7 @@ export default function ChatPage() {
     if (!onboardingChecked) return;
     if (!canUseSubjects) return;
 
-    if (!activeSubject) {
+    if (!activeChat) {
       setMessages([]);
       return;
     }
@@ -277,7 +288,7 @@ export default function ChatPage() {
       try {
         const sessionId = await getOrCreateSessionId();
 
-        const res = await fetch(`/api/subjects/${activeSubject.id}/messages`, {
+        const res = await fetch(`/api/subjects/${activeChat.id}/messages`, {
           credentials: "include",
           headers: {
             ...(sessionId ? { "x-session-id": sessionId } : {}),
@@ -315,7 +326,7 @@ export default function ChatPage() {
         if (!aborted) {
           setMessages(
             loaded.map((m, idx) => ({
-              id: `${activeSubject.id}-${m.createdAt ?? idx}`,
+              id: `${activeChat.id}-${m.createdAt ?? idx}`,
               role: m.role,
               content: m.content,
             }))
@@ -343,7 +354,57 @@ export default function ChatPage() {
     return () => {
       aborted = true;
     };
-  }, [activeSubject, canUseSubjects, onboardingChecked]);
+  }, [activeChat, canUseSubjects, onboardingChecked]);
+
+  const createChatForMessage = useCallback(
+    async (text: string): Promise<ChatListItem> => {
+      const sessionId = await getOrCreateSessionId();
+      const payload = {
+        title: autoTitleFromText(text),
+        mode: "grounding" as Mode,
+      };
+
+      const res = await fetch("/api/subjects", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(sessionId ? { "x-session-id": sessionId } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (data?.plan) setPlan(data.plan as Plan);
+      if (data?.entitlements)
+        setEntitlements(data.entitlements as Entitlements);
+
+      if (!res.ok) {
+        const code = data?.error?.code as string | undefined;
+        const message = data?.error?.message as string | undefined;
+
+        if (code === "LIMIT_REACHED" || code === "UPGRADE_REQUIRED") {
+          setBlockingError({
+            code,
+            message: message ?? "Upgrade required.",
+          });
+        }
+
+        throw new Error(message ?? "Could not start a new chat.");
+      }
+
+      const subject = data?.subject as ChatListItem | undefined;
+      if (!subject) {
+        throw new Error("Chat could not be created.");
+      }
+
+      setActiveChat(subject);
+      setSidebarRefresh((n) => n + 1);
+      return subject;
+    },
+    []
+  );
 
   const handleSend = useCallback(
     async ({ text }: { text: string; subjectId?: string | null }) => {
@@ -358,14 +419,20 @@ export default function ChatPage() {
       };
 
       if (canUseSubjects) {
-        if (!activeSubject) {
-          setBlockingError({
-            code: "SUBJECT_REQUIRED",
-            message: "Select or create a subject to start chatting.",
-          });
+        try {
+          const chat = activeChat ?? (await createChatForMessage(text));
+          payload.subjectId = chat.id;
+        } catch (err: any) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: makeId("assistant-error"),
+              role: "assistant",
+              content: err?.message ?? "Could not start a new chat.",
+            },
+          ]);
           return;
         }
-        payload.subjectId = activeSubject.id;
       } else {
         payload.mode = "grounding" as CoachingMode;
       }
@@ -417,6 +484,12 @@ export default function ChatPage() {
           content: reply,
         };
 
+        if (canUseSubjects) {
+          const nowTs = Date.now();
+          setActiveChat((prev) => (prev ? { ...prev, updatedAt: nowTs } : prev));
+          setSidebarRefresh((n) => n + 1);
+        }
+
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err: any) {
         setMessages((prev) => [
@@ -433,7 +506,7 @@ export default function ChatPage() {
         setIsSending(false);
       }
     },
-    [activeSubject, blockingError, canUseSubjects, isSending, onboardingChecked]
+    [activeChat, blockingError, canUseSubjects, createChatForMessage, isSending, onboardingChecked]
   );
 
   // Persist single-thread messages locally so navigation doesn't wipe them
@@ -461,15 +534,13 @@ export default function ChatPage() {
   }, [messages, onboardingChecked, canUseSubjects]);
 
   const placeholder = canUseSubjects
-    ? activeSubject
-      ? `Chatting in ${activeSubject.title}`
-      : "Pick or create a subject to start."
+    ? activeChat
+      ? `Chatting in ${activeChat.title}`
+      : "Message menscoach.ai to start a new chat."
     : "Type what is on your mind...";
 
   const disableInputMessage = blockingError
     ? blockingError.message ?? "Upgrade required."
-    : canUseSubjects && !activeSubject
-    ? "Select or create a subject to start chatting."
     : null;
 
   const upgradeCTA =
@@ -523,40 +594,67 @@ export default function ChatPage() {
               ) : null
             }
             header={
-              <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
-                <div className="text-xs text-slate-300">
-                  Plan: <span className="font-semibold uppercase">{plan}</span>
-                </div>
-
-                {canUseSubjects ? (
-                  <div className="text-xs text-slate-400">
-                    {activeSubject
-                      ? `Subject: ${activeSubject.title} (${activeSubject.mode})`
-                      : "Select or create a subject to begin."}
+              canUseSubjects ? (
+                <div className="mx-auto w-full max-w-6xl space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <div>
+                      Plan: <span className="font-semibold uppercase text-slate-200">{plan}</span>
+                    </div>
+                    <div className="text-slate-500">
+                      Chats show newest first. Click title to rename.
+                    </div>
                   </div>
-                ) : (
+                  <ChatHeader
+                    chat={activeChat}
+                    onUpdated={(updated) => {
+                      setActiveChat(updated);
+                      setSidebarRefresh((n) => n + 1);
+                    }}
+                    onDeleted={(id) => {
+                      if (activeChat?.id === id) {
+                        setActiveChat(null);
+                        setMessages([]);
+                      }
+                      setSidebarRefresh((n) => n + 1);
+                    }}
+                    onRefreshSidebar={() => setSidebarRefresh((n) => n + 1)}
+                  />
+                </div>
+              ) : (
+                <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
                   <div className="text-xs text-slate-400">
                     Single thread. {entitlements.dailyMessageLimit ?? "Unlimited"}{" "}
                     messages/day.
                   </div>
-                )}
-              </div>
+                </div>
+              )
             }
             sidebar={
               canUseSubjects ? (
-                <SubjectsSidebar
-                  activeSubjectId={activeSubject?.id}
+                <ChatSidebar
+                  activeChatId={activeChat?.id}
                   onSelect={(subject) => {
                     setBlockingError(null);
-                    setActiveSubject(subject);
+                    setActiveChat(subject);
+                    if (!subject) {
+                      setMessages([]);
+                    }
                   }}
                   onPlanResolved={(newPlan) => setPlan(newPlan)}
                   onEntitlementsResolved={(ent) => setEntitlements(ent)}
+                  onNewChat={() => {
+                    setActiveChat(null);
+                    setMessages([]);
+                    setBlockingError(null);
+                    setFocusSignal((n) => n + 1);
+                  }}
+                  refreshKey={sidebarRefresh}
                 />
               ) : null
             }
-            activeSubjectId={activeSubject?.id ?? null}
+            activeSubjectId={activeChat?.id ?? null}
             disableInputMessage={disableInputMessage}
+            focusSignal={focusSignal}
           />
         </div>
       </div>

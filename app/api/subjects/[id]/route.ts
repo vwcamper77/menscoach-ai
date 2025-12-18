@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSubject, listSubjects } from "@/lib/subjects";
 import { getEntitlements, EntitlementError, Plan, Entitlements } from "@/lib/entitlements";
 import { getUserPlan } from "@/lib/users";
-import type { Mode } from "@/lib/modes";
 import { resolveSessionId } from "@/lib/sessionId";
+import { updateSubject, deleteSubject, getSubject } from "@/lib/subjects";
 
 function errorResponse(
   code: string,
@@ -15,8 +14,10 @@ function errorResponse(
   return NextResponse.json({ error: { code, message }, plan, entitlements }, { status });
 }
 
-// GET /api/subjects -> list subjects
-export async function GET(req: NextRequest) {
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
 
@@ -27,7 +28,6 @@ export async function GET(req: NextRequest) {
     }
 
     const sessionId = sessionResolution.sessionId;
-
     plan = await getUserPlan(sessionId);
     ent = getEntitlements(plan);
 
@@ -41,35 +41,44 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const subjects = await listSubjects(sessionId);
-    return NextResponse.json({ subjects, plan, entitlements: ent });
+    const { id } = params;
+    if (!id) {
+      return errorResponse("INVALID_SUBJECT", "Chat id is required.", 400, plan, ent);
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const title =
+      typeof body?.title === "string" && body.title.trim().length > 0
+        ? body.title.trim()
+        : undefined;
+    const mode =
+      typeof body?.mode === "string" && body.mode.trim().length > 0
+        ? body.mode.trim()
+        : undefined;
+
+    if (!title && !mode) {
+      return errorResponse("NO_UPDATES", "Nothing to update.", 400, plan, ent);
+    }
+
+    const subject = await updateSubject(sessionId, id, { title, mode });
+
+    return NextResponse.json({ subject, plan, entitlements: ent });
   } catch (err: any) {
     if (err instanceof EntitlementError) {
       return errorResponse(err.code, err.message, 403, plan, ent);
     }
 
-    const rawCode = err?.code ?? "UNKNOWN";
-    const codeUpper = typeof rawCode === "string" ? rawCode.toUpperCase() : rawCode;
-
-    if (codeUpper === "FAILED_PRECONDITION" || codeUpper === 9) {
-      return errorResponse(
-        "INDEX_BUILDING",
-        "Index building in Firestore. Try again in 1 to 2 minutes.",
-        503,
-        plan,
-        ent
-      );
-    }
-
-    const code = rawCode;
+    const code = err?.code ?? "UNKNOWN";
     const message = err?.message ?? "Unexpected error";
     const status = code === "NOT_FOUND" ? 404 : code === "FORBIDDEN" ? 403 : 500;
     return errorResponse(code, message, status, plan, ent);
   }
 }
 
-// POST /api/subjects -> create a subject
-export async function POST(req: NextRequest) {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
 
@@ -80,7 +89,6 @@ export async function POST(req: NextRequest) {
     }
 
     const sessionId = sessionResolution.sessionId;
-
     plan = await getUserPlan(sessionId);
     ent = getEntitlements(plan);
 
@@ -94,25 +102,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json().catch(() => ({}));
-
-    const title = typeof body?.title === "string" ? body.title.trim() : "";
-    if (!title) {
-      return errorResponse("INVALID_TITLE", "Title is required.", 400, plan, ent);
+    const { id } = params;
+    if (!id) {
+      return errorResponse("INVALID_SUBJECT", "Chat id is required.", 400, plan, ent);
     }
 
-    // --- FIX: coerce string -> Mode ---
-    const modeRaw = body?.mode;
-    if (typeof modeRaw !== "string" || !modeRaw.trim()) {
-      return errorResponse("INVALID_MODE", "Mode is required.", 400, plan, ent);
-    }
+    await getSubject(sessionId, id); // ownership check
+    await deleteSubject(sessionId, id);
 
-    // Cast to Mode (compile-time). If you want strict runtime validation,
-    // export an isMode() guard from lib/modes.ts and use it here instead.
-    const mode = modeRaw as Mode;
-
-    const subject = await createSubject(sessionId, { title, mode }, plan);
-    return NextResponse.json({ subject, plan, entitlements: ent });
+    return NextResponse.json({ ok: true, plan, entitlements: ent });
   } catch (err: any) {
     if (err instanceof EntitlementError) {
       return errorResponse(err.code, err.message, 403, plan, ent);

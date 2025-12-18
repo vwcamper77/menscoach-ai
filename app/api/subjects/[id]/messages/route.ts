@@ -35,7 +35,7 @@ export async function GET(
     if ((ent.maxSubjects ?? 0) <= 0) {
       return errorResponse(
         "UPGRADE_REQUIRED",
-        "Subjects are available on paid plans.",
+        "Chats are available on paid plans.",
         403,
         plan,
         ent

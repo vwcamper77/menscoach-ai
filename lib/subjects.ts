@@ -16,6 +16,7 @@ export type SubjectRecord = {
   userId: string;
   createdAt: number;
   updatedAt: number;
+  lastMessagePreview?: string;
 };
 
 export type SubjectInput = {
@@ -74,7 +75,7 @@ export async function listSubjects(sessionId: string): Promise<SubjectRecord[]> 
   const snap = await db
     .collection(SUBJECTS_COLLECTION)
     .where("userId", "==", sessionId)
-    .orderBy("createdAt", "desc")
+    .orderBy("updatedAt", "desc")
     .get();
 
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as SubjectRecord[];
@@ -123,6 +124,17 @@ export async function addMessage(
     .doc();
 
   await ref.set(record);
+
+  await db
+    .collection(SUBJECTS_COLLECTION)
+    .doc(safeId(subjectId))
+    .set(
+      {
+        updatedAt: now,
+        lastMessagePreview: record.content.slice(0, 180),
+      },
+      { merge: true }
+    );
 }
 
 export async function listMessages(
@@ -143,4 +155,45 @@ export async function listMessages(
 
   const items = snap.docs.map((d) => d.data() as SubjectMessage);
   return items.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function updateSubject(
+  sessionId: string,
+  subjectId: string,
+  updates: Partial<Pick<SubjectRecord, "title" | "mode">>
+): Promise<SubjectRecord> {
+  const db = getFirestore();
+  const subject = await getSubject(sessionId, subjectId);
+
+  const now = Date.now();
+  const payload: Record<string, any> = { updatedAt: now };
+
+  if (typeof updates.title === "string" && updates.title.trim()) {
+    payload.title = updates.title.trim();
+  }
+
+  if (typeof updates.mode === "string" && updates.mode.trim()) {
+    payload.mode = updates.mode.trim();
+  }
+
+  await db.collection(SUBJECTS_COLLECTION).doc(safeId(subjectId)).set(payload, { merge: true });
+
+  return {
+    ...subject,
+    ...payload,
+  };
+}
+
+export async function deleteSubject(sessionId: string, subjectId: string): Promise<void> {
+  const db = getFirestore();
+  await getSubject(sessionId, subjectId); // ownership check
+  const docRef = db.collection(SUBJECTS_COLLECTION).doc(safeId(subjectId));
+
+  // Delete messages (best-effort, small scale)
+  const messagesSnap = await docRef.collection("messages").get();
+  const batch = db.batch();
+  messagesSnap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit().catch(() => null);
+
+  await docRef.delete();
 }

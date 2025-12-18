@@ -21,6 +21,7 @@ type Props = {
   activeSubjectId?: string | null;
   disableInputMessage?: string | null;
   footerBanner?: React.ReactNode;
+  focusSignal?: number;
 };
 
 export default function ChatUI({
@@ -33,6 +34,7 @@ export default function ChatUI({
   activeSubjectId = null,
   disableInputMessage = null,
   footerBanner = null,
+  focusSignal = 0,
 }: Props) {
   const [text, setText] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -62,6 +64,12 @@ export default function ChatUI({
       inputRef.current?.blur();
     }
   }, [isSending]);
+
+  // External focus requests (e.g., "New chat" click).
+  useEffect(() => {
+    if (focusSignal <= 0) return;
+    inputRef.current?.focus();
+  }, [focusSignal]);
 
   async function handleSend() {
     const value = text.trim();

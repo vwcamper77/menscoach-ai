@@ -5,14 +5,14 @@ import { useEffect, useState } from "react";
 import TopNav from "@/components/TopNav";
 
 function getCallbackUrlFromLocation(): string {
-  if (typeof window === "undefined") return "/chat";
+  if (typeof window === "undefined") return "/dashboard";
   const sp = new URLSearchParams(window.location.search);
-  return sp.get("callbackUrl") ?? "/chat";
+  return sp.get("callbackUrl") ?? "/dashboard";
 }
 
 export default function LoginClient() {
   const [email, setEmail] = useState("");
-  const [callbackUrl, setCallbackUrl] = useState("/chat");
+  const [callbackUrl, setCallbackUrl] = useState("/dashboard");
 
   useEffect(() => {
     setCallbackUrl(getCallbackUrlFromLocation());
