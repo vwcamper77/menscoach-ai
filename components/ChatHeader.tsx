@@ -38,20 +38,22 @@ export default function ChatHeader({ chat, onUpdated, onDeleted, onRefreshSideba
   }
 
   async function saveTitle(nextTitle: string) {
-    if (!nextTitle.trim() || nextTitle === chat.title) return;
+    if (!chat) return;
+    const trimmed = nextTitle.trim();
+    if (!trimmed || trimmed === chat.title) return;
     setSaving(true);
     setError(null);
     try {
       const res = await fetch(`/api/subjects/${chat.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: nextTitle.trim() }),
+        body: JSON.stringify({ title: trimmed }),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error?.message ?? "Could not rename chat.");
       }
-      const updated = (data?.subject as ChatListItem) ?? { ...chat, title: nextTitle.trim() };
+      const updated = (data?.subject as ChatListItem) ?? { ...chat, title: trimmed };
       onUpdated?.(updated);
       onRefreshSidebar?.();
     } catch (err: any) {
@@ -62,6 +64,7 @@ export default function ChatHeader({ chat, onUpdated, onDeleted, onRefreshSideba
   }
 
   async function saveMode(nextMode: Mode) {
+    if (!chat) return;
     if (nextMode === chat.mode) return;
     setSaving(true);
     setError(null);
