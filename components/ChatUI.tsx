@@ -99,7 +99,7 @@ export default function ChatUI({
           className="flex-1 min-h-0 w-full overflow-y-auto px-4 py-4"
           ref={containerRef}
           style={{
-            paddingBottom: "calc(140px + var(--mc-vv-offset, 0px))",
+            paddingBottom: "calc(200px + var(--mc-vv-offset, 0px))",
           }}
         >
           <div className="mx-auto w-full max-w-5xl space-y-3">
@@ -143,6 +143,7 @@ export default function ChatUI({
           style={{
             paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)",
             bottom: "var(--mc-vv-offset, 0px)",
+            zIndex: 40,
           }}
         >
           <div className="mx-auto w-full max-w-5xl">

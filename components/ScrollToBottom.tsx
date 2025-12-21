@@ -23,17 +23,33 @@ export default function ScrollToBottom({ containerRef, bottomRef, watchKey }: Pr
   // Toggle button when user scrolls away from the bottom
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    const bottom = bottomRef.current;
+    if (!container || !bottom) return;
 
-    const handleScroll = () => {
+    const update = () => {
       const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
-      setShow(distance > 200);
+      const farEnough = distance > 160;
+      setShow(farEnough);
     };
 
-    handleScroll();
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [containerRef, watchKey]);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) {
+          setShow(!entry.isIntersecting);
+        }
+      },
+      { root: container, threshold: 1 }
+    );
+
+    observer.observe(bottom);
+    update();
+    container.addEventListener("scroll", update, { passive: true });
+    return () => {
+      observer.disconnect();
+      container.removeEventListener("scroll", update);
+    };
+  }, [containerRef, bottomRef, watchKey]);
 
   // Auto-scroll on new messages only if user is already near the bottom
   useEffect(() => {
