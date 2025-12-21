@@ -57,7 +57,7 @@ export default function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/70 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur shadow-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <Link href="/" className="text-sm font-semibold tracking-wide text-slate-100">
           menscoach.ai

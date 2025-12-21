@@ -15,9 +15,9 @@ export default function ScrollToBottom({ containerRef, bottomRef, watchKey }: Pr
   const [show, setShow] = useState(false);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    const el = bottomRef.current;
-    if (!el) return;
-    el.scrollIntoView({ behavior, block: "end" });
+    const container = containerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
   };
 
   // Detect whether the bottom sentinel is visible inside the scroll container
@@ -63,6 +63,7 @@ export default function ScrollToBottom({ containerRef, bottomRef, watchKey }: Pr
       className="fixed bottom-24 right-4 z-50 rounded-full border border-white/10 bg-slate-900/80 backdrop-blur px-3 py-3 text-white shadow-lg hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
       aria-label="Scroll to latest message"
       title="Scroll to latest"
+      style={{ bottom: `calc(96px + var(--mc-vv-offset, 0px))` }}
     >
       {/* Down arrow */}
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">

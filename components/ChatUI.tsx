@@ -43,12 +43,12 @@ export default function ChatUI({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const el = bottomRef.current;
-    if (!el) return;
-    el.scrollIntoView({ behavior, block: "end" });
+    const container = containerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
   }, []);
 
-  useVisualViewportOffset(() => scrollToBottom("smooth"));
+  useVisualViewportOffset(() => scrollToBottom("auto"));
 
   const canSend = useMemo(() => {
     if (disableInputMessage) return false;
@@ -99,7 +99,7 @@ export default function ChatUI({
           className="flex-1 min-h-0 w-full overflow-y-auto px-4 py-4"
           ref={containerRef}
           style={{
-            paddingBottom: "calc(120px + var(--mc-vv-offset, 0px))",
+            paddingBottom: "calc(140px + var(--mc-vv-offset, 0px))",
           }}
         >
           <div className="mx-auto w-full max-w-5xl space-y-3">
@@ -142,7 +142,7 @@ export default function ChatUI({
           className="sticky bottom-0 w-full border-t border-slate-800 bg-slate-950/90 backdrop-blur px-4 py-3"
           style={{
             paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)",
-            marginBottom: "var(--mc-vv-offset, 0px)",
+            bottom: "var(--mc-vv-offset, 0px)",
           }}
         >
           <div className="mx-auto w-full max-w-5xl">
@@ -160,7 +160,7 @@ export default function ChatUI({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
-                onFocus={() => requestAnimationFrame(() => scrollToBottom("smooth"))}
+                onFocus={() => requestAnimationFrame(() => scrollToBottom("auto"))}
                 placeholder={placeholder}
                 disabled={isSending || !!disableInputMessage}
               />
