@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ScrollToBottom from "./ScrollToBottom";
 import { useVisualViewportOffset } from "@/utils/useVisualViewportOffset";
 
 type Role = "user" | "assistant" | "system";
@@ -37,21 +38,17 @@ export default function ChatUI({
   focusSignal = 0,
 }: Props) {
   const [text, setText] = useState("");
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const scrollToBottom = useCallback(() => {
-    const el = scrollerRef.current;
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = bottomRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    el.scrollIntoView({ behavior, block: "end" });
   }, []);
 
-  useVisualViewportOffset(scrollToBottom);
-
-  const messageCount = messages.length;
-  useEffect(() => {
-    scrollToBottom();
-  }, [messageCount, scrollToBottom]);
+  useVisualViewportOffset(() => scrollToBottom("smooth"));
 
   const canSend = useMemo(() => {
     if (disableInputMessage) return false;
@@ -100,7 +97,7 @@ export default function ChatUI({
 
         <div
           className="flex-1 min-h-0 w-full overflow-y-auto px-4 py-4"
-          ref={scrollerRef}
+          ref={containerRef}
           style={{
             paddingBottom: "calc(120px + var(--mc-vv-offset, 0px))",
           }}
@@ -130,8 +127,16 @@ export default function ChatUI({
                 </div>
               </div>
             ) : null}
+
+            <div ref={bottomRef} />
           </div>
         </div>
+
+        <ScrollToBottom
+          containerRef={containerRef}
+          bottomRef={bottomRef}
+          watchKey={messages.length}
+        />
 
         <div
           className="sticky bottom-0 w-full border-t border-slate-800 bg-slate-950/90 backdrop-blur px-4 py-3"
@@ -155,7 +160,7 @@ export default function ChatUI({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
-                onFocus={() => requestAnimationFrame(scrollToBottom)}
+                onFocus={() => requestAnimationFrame(() => scrollToBottom("smooth"))}
                 placeholder={placeholder}
                 disabled={isSending || !!disableInputMessage}
               />
