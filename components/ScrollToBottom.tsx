@@ -20,27 +20,20 @@ export default function ScrollToBottom({ containerRef, bottomRef, watchKey }: Pr
     container.scrollTo({ top: container.scrollHeight, behavior });
   };
 
-  // Detect whether the bottom sentinel is visible inside the scroll container
+  // Toggle button when user scrolls away from the bottom
   useEffect(() => {
     const container = containerRef.current;
-    const bottom = bottomRef.current;
-    if (!container || !bottom) return;
+    if (!container) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        // If bottom is NOT visible, user is scrolled up, show button
-        setShow(!entry.isIntersecting);
-      },
-      {
-        root: container,
-        threshold: 1.0,
-      }
-    );
+    const handleScroll = () => {
+      const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+      setShow(distance > 200);
+    };
 
-    observer.observe(bottom);
-    return () => observer.disconnect();
-  }, [containerRef, bottomRef]);
+    handleScroll();
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [containerRef, watchKey]);
 
   // Auto-scroll on new messages only if user is already near the bottom
   useEffect(() => {

@@ -557,7 +557,7 @@ export default function ChatPage() {
   }
 
   return (
-    <main className="h-dvh bg-slate-950 text-slate-50 flex flex-col">
+    <main className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
       <TopNav />
 
       <div className="flex-1 flex flex-col">
