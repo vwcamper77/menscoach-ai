@@ -16,7 +16,7 @@ function errorResponse(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
@@ -41,7 +41,7 @@ export async function PATCH(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!id) {
       return errorResponse("INVALID_SUBJECT", "Chat id is required.", 400, plan, ent);
     }
@@ -77,7 +77,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let plan: Plan | undefined;
   let ent: Entitlements | undefined;
@@ -102,7 +102,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     if (!id) {
       return errorResponse("INVALID_SUBJECT", "Chat id is required.", 400, plan, ent);
     }
